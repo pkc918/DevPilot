@@ -2,6 +2,8 @@
 
 macOS 菜单栏端口监控工具。自动发现本机开发服务端口，不用记 `lsof -iTCP -sTCP:LISTEN` 也不用背 `kill` PID —— 看一眼菜单栏就知道哪些服务在跑、跑在哪个项目目录，一键就能关掉。AI 跑完项目残留一堆端口也不怕，菜单栏直接关，不用回命令行查。
 
+<img src="assets/product.png" alt="DevPilot 截图" width="800">
+
 ## 功能
 
 - **自动发现项目端口** — 自动识别当前用户启动的开发服务（TCP LISTEN），排除 WeChat、WebStorm 等桌面应用的服务端
