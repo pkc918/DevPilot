@@ -1,4 +1,103 @@
 import Foundation
+import Darwin
+
+// MARK: - libproc bridge
+
+nonisolated private let PROC_PIDT_SHORTBSDINFO: Int32 = 13
+nonisolated private let MAXPATHLEN: Int32 = 1024
+
+nonisolated private let libprocHandle: UnsafeMutableRawPointer? = {
+    dlopen("/usr/lib/libproc.dylib", RTLD_NOW)
+}()
+
+private typealias ProcPidpathFunc = @convention(c) (Int32, UnsafeMutablePointer<CChar>?, UInt32) -> Int32
+private typealias ProcPidinfoFunc = @convention(c) (Int32, Int32, UInt64, UnsafeMutableRawPointer?, Int32) -> Int32
+
+nonisolated private func resolveProcPidpath() -> ProcPidpathFunc? {
+    guard let handle = libprocHandle,
+          let sym = dlsym(handle, "proc_pidpath") else { return nil }
+    return unsafeBitCast(sym, to: ProcPidpathFunc.self)
+}
+
+nonisolated private func resolveProcPidinfo() -> ProcPidinfoFunc? {
+    guard let handle = libprocHandle,
+          let sym = dlsym(handle, "proc_pidinfo") else { return nil }
+    return unsafeBitCast(sym, to: ProcPidinfoFunc.self)
+}
+
+private struct ProcBSDShortInfo {
+    var pbsi_pid: UInt32 = 0
+    var pbsi_ppid: UInt32 = 0
+    var pbsi_pgid: UInt32 = 0
+    var pbsi_status: UInt32 = 0
+    var pbsi_comm: (CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar) = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    var pbsi_flags: UInt64 = 0
+    var pbsi_uid: uid_t = 0
+    var pbsi_gid: gid_t = 0
+    var pbsi_ruid: uid_t = 0
+    var pbsi_rgid: gid_t = 0
+    var pbsi_svuid: uid_t = 0
+    var pbsi_svgid: gid_t = 0
+    var pbsi_rfu: Int32 = 0
+}
+
+nonisolated private func commandFromBSDInfo(_ info: ProcBSDShortInfo) -> String {
+    var comm = info.pbsi_comm
+    return withUnsafePointer(to: &comm.0) { ptr in
+        String(cString: UnsafeRawPointer(ptr).assumingMemoryBound(to: CChar.self))
+    }
+}
+
+// MARK: - CWD resolution via lsof
+
+nonisolated private func resolveCWDsViaLsof(for pids: Set<Int>) -> [Int: String] {
+    let sortedPIDs = pids.filter { $0 > 0 }.sorted()
+    guard !sortedPIDs.isEmpty else { return [:] }
+
+    var result: [Int: String] = [:]
+    let batchSize = 100
+
+    for batchStart in stride(from: 0, to: sortedPIDs.count, by: batchSize) {
+        let batch = Array(sortedPIDs[batchStart..<min(batchStart + batchSize, sortedPIDs.count)])
+        let pidArg = batch.map(String.init).joined(separator: ",")
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        process.arguments = ["-a", "-d", "cwd", "-p", pidArg, "-F", "pn"]
+
+        let outputPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+
+            guard process.terminationStatus == 0 else { continue }
+
+            let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+            guard let output = String(data: data, encoding: .utf8) else { continue }
+
+            var currentPID = 0
+            for line in output.split(whereSeparator: \.isNewline).map(String.init) {
+                guard let marker = line.first else { continue }
+                let value = String(line.dropFirst())
+                if marker == "p", let pid = Int(value) {
+                    currentPID = pid
+                } else if marker == "n", currentPID > 0 {
+                    result[currentPID] = value
+                    currentPID = 0
+                }
+            }
+        } catch {
+            continue
+        }
+    }
+
+    return result
+}
+
+// MARK: - Errors
 
 enum PortScannerError: LocalizedError {
     case missingOutput
@@ -16,6 +115,8 @@ enum PortScannerError: LocalizedError {
         }
     }
 }
+
+// MARK: - Scanner
 
 struct PortScanner {
     func scan() async throws -> PortScanResult {
@@ -45,12 +146,68 @@ struct PortScanner {
             }
 
             let lines = output.split(whereSeparator: \.isNewline).count
+            let rawPorts = Self.parse(output: output)
+            let exePaths = Self.resolveExecutablePaths(for: Set(rawPorts.map(\.pid)))
+
+            let ports = rawPorts.map { port in
+                PortUsage(
+                    command: port.command,
+                    pid: port.pid,
+                    user: port.user,
+                    protocolName: port.protocolName,
+                    address: port.address,
+                    port: port.port,
+                    state: port.state,
+                    executablePath: exePaths[port.pid] ?? ""
+                )
+            }
+
             return PortScanResult(
-                ports: Self.parse(output: output),
+                ports: ports,
                 rawLineCount: lines,
                 commandDescription: "/usr/sbin/lsof -nP -F pcunPTn -iTCP -sTCP:LISTEN -iUDP"
             )
         }.value
+    }
+
+    func enrich(_ ports: [PortUsage]) async -> [PortUsage] {
+        let pids = Set(ports.map(\.pid))
+        return await Task.detached(priority: .background) {
+            let cwds = resolveCWDsViaLsof(for: pids)
+            let parentCommands = Self.resolveParentCommands(for: pids)
+
+            return ports.map { port in
+                PortUsage(
+                    command: port.command,
+                    pid: port.pid,
+                    user: port.user,
+                    protocolName: port.protocolName,
+                    address: port.address,
+                    port: port.port,
+                    state: port.state,
+                    executablePath: port.executablePath,
+                    workingDirectory: cwds[port.pid] ?? "",
+                    parentCommand: parentCommands[port.pid] ?? ""
+                )
+            }
+        }.value
+    }
+
+    // MARK: - Executable path (fast, via proc_pidpath)
+
+    nonisolated private static func resolveExecutablePaths(for pids: Set<Int>) -> [Int: String] {
+        guard let pidpathFunc = resolveProcPidpath() else { return [:] }
+        var result: [Int: String] = [:]
+        var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+
+        for pid in pids where pid > 0 {
+            let len = pidpathFunc(Int32(pid), &buffer, UInt32(MAXPATHLEN))
+            if len > 0 {
+                result[pid] = String(cString: buffer)
+            }
+        }
+
+        return result
     }
 
     func terminateProcesses(pids: [Int]) async throws {
@@ -75,6 +232,49 @@ struct PortScanner {
             }
         }.value
     }
+
+    nonisolated private static func resolveParentCommands(for pids: Set<Int>) -> [Int: String] {
+        guard let pidinfoFunc = resolveProcPidinfo() else { return [:] }
+
+        var pidToParentPID: [Int: Int] = [:]
+        var uniqueParentPIDs = Set<Int>()
+        let infoSize = Int32(MemoryLayout<ProcBSDShortInfo>.size)
+
+        for pid in pids where pid > 0 {
+            var info = ProcBSDShortInfo()
+            let ret = pidinfoFunc(Int32(pid), PROC_PIDT_SHORTBSDINFO, 0, &info, infoSize)
+            guard ret > 0 else { continue }
+
+            let ppid = Int(info.pbsi_ppid)
+            guard ppid > 0, ppid != pid else { continue }
+
+            pidToParentPID[pid] = ppid
+            uniqueParentPIDs.insert(ppid)
+        }
+
+        var parentCommand: [Int: String] = [:]
+
+        for ppid in uniqueParentPIDs {
+            var info = ProcBSDShortInfo()
+            let ret = pidinfoFunc(Int32(ppid), PROC_PIDT_SHORTBSDINFO, 0, &info, infoSize)
+            guard ret > 0 else { continue }
+
+            let name = commandFromBSDInfo(info)
+            guard !name.isEmpty else { continue }
+            parentCommand[ppid] = name
+        }
+
+        var result: [Int: String] = [:]
+        for (pid, ppid) in pidToParentPID {
+            if let cmd = parentCommand[ppid] {
+                result[pid] = cmd
+            }
+        }
+
+        return result
+    }
+
+    // MARK: - lsof output parsing
 
     nonisolated private static func parse(output: String) -> [PortUsage] {
         var currentPID = 0
