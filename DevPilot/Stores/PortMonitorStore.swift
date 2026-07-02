@@ -9,6 +9,7 @@ final class PortMonitorStore: ObservableObject {
     @Published var diagnosticText = "尚未执行扫描"
 
     private let scanner = PortScanner()
+    private var isScanning = false
 
     var projectPorts: [PortUsage] {
         ports.filter(\.isProjectService)
@@ -52,22 +53,59 @@ final class PortMonitorStore: ObservableObject {
             .map { $0 }
     }
 
-    func refresh() async {
-        guard !isRefreshing else { return }
+    func refresh(showActivity: Bool = true) async {
+        guard !isScanning else { return }
 
+        isScanning = true
+        if showActivity {
+            isRefreshing = true
+            errorMessage = nil
+        }
+
+        do {
+            let result = try await scanner.scan()
+            let nextDiagnosticText = "raw \(result.rawLineCount) lines, parsed \(result.ports.count) ports"
+            let hasPortChanges = result.ports != ports
+
+            if showActivity || hasPortChanges || errorMessage != nil {
+                ports = result.ports
+                lastUpdated = Date()
+                diagnosticText = nextDiagnosticText
+                errorMessage = nil
+            }
+        } catch {
+            if showActivity || errorMessage != error.localizedDescription {
+                errorMessage = error.localizedDescription
+                diagnosticText = error.localizedDescription
+            }
+        }
+
+        if showActivity {
+            isRefreshing = false
+        }
+        isScanning = false
+    }
+
+    func closePortServices(_ usages: [PortUsage]) async {
+        guard !isScanning else { return }
+
+        let pids = Array(Set(usages.map(\.pid))).sorted()
+        guard !pids.isEmpty else { return }
+
+        isScanning = true
         isRefreshing = true
         errorMessage = nil
 
         do {
-            let result = try await scanner.scan()
-            ports = result.ports
-            lastUpdated = Date()
-            diagnosticText = "raw \(result.rawLineCount) lines, parsed \(result.ports.count) ports"
+            try await scanner.terminateProcesses(pids: pids)
+            try? await Task.sleep(for: .milliseconds(400))
+            isScanning = false
+            await refresh()
         } catch {
             errorMessage = error.localizedDescription
             diagnosticText = error.localizedDescription
+            isRefreshing = false
+            isScanning = false
         }
-
-        isRefreshing = false
     }
 }

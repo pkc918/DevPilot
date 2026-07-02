@@ -14,5 +14,9 @@ struct DevPilotApp: App {
             ContentView()
         }
         .windowResizability(.contentMinSize)
+
+        Settings {
+            SettingsView()
+        }
     }
 }

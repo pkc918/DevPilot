@@ -3,6 +3,7 @@ import Foundation
 enum PortScannerError: LocalizedError {
     case missingOutput
     case commandFailed(String)
+    case terminateFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -10,6 +11,8 @@ enum PortScannerError: LocalizedError {
             "没有收到端口扫描输出。"
         case .commandFailed(let message):
             message.isEmpty ? "端口扫描命令执行失败。" : message
+        case .terminateFailed(let message):
+            message.isEmpty ? "关闭端口服务失败。" : message
         }
     }
 }
@@ -47,6 +50,29 @@ struct PortScanner {
                 rawLineCount: lines,
                 commandDescription: "/usr/sbin/lsof -nP -F pcunPTn -iTCP -sTCP:LISTEN -iUDP"
             )
+        }.value
+    }
+
+    func terminateProcesses(pids: [Int]) async throws {
+        let uniquePIDs = Array(Set(pids.filter { $0 > 0 })).sorted()
+        guard !uniquePIDs.isEmpty else { return }
+
+        try await Task.detached(priority: .userInitiated) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/kill")
+            process.arguments = ["-TERM"] + uniquePIDs.map(String.init)
+
+            let errorPipe = Pipe()
+            process.standardError = errorPipe
+
+            try process.run()
+            process.waitUntilExit()
+
+            guard process.terminationStatus == 0 else {
+                let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                let message = String(data: errorData, encoding: .utf8) ?? ""
+                throw PortScannerError.terminateFailed(message.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
         }.value
     }
 
