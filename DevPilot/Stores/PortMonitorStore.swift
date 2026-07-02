@@ -20,7 +20,7 @@ final class PortMonitorStore: ObservableObject {
     private var lastScanDate: Date?
 
     func publishLatestPortsIfNeeded() {
-        guard visibleCoreFields(ports, scope: .all) != visibleCoreFields(latestPorts, scope: .all) else {
+        guard visibleFields(ports, scope: .all) != visibleFields(latestPorts, scope: .all) else {
             return
         }
 
@@ -51,8 +51,9 @@ final class PortMonitorStore: ObservableObject {
             let result = try await scanner.scan()
             lastScanDate = Date()
 
-            let rawChanged = visibleCoreFields(latestPorts, scope: .all) != visibleCoreFields(result.ports, scope: .all)
-            let visibleChanged = hasVisibleChanges(from: ports, to: result.ports, visibleScope: visibleScope)
+            let rawChanged = scanIdentityFields(latestPorts, scope: .all) != scanIdentityFields(result.ports, scope: .all)
+            let candidatePorts = rawChanged ? result.ports : latestPorts
+            let visibleChanged = hasVisibleChanges(from: ports, to: candidatePorts, visibleScope: visibleScope)
             shouldEnrichLatestPorts = visibleChanged
             let shouldPublish = showActivity
                 || errorMessage != nil
@@ -62,11 +63,12 @@ final class PortMonitorStore: ObservableObject {
                 latestPorts = result.ports
             }
 
+            lastUpdated = Date()
+            diagnosticText = "raw \(result.rawLineCount) lines, parsed \(result.ports.count) ports"
+            errorMessage = nil
+
             if shouldPublish {
-                setPorts(rawChanged ? result.ports : latestPorts)
-                lastUpdated = Date()
-                diagnosticText = "raw \(result.rawLineCount) lines, parsed \(result.ports.count) ports"
-                errorMessage = nil
+                setPorts(candidatePorts)
             }
         } catch {
             if showActivity || errorMessage != error.localizedDescription {
@@ -136,20 +138,29 @@ final class PortMonitorStore: ObservableObject {
     ) -> Bool {
         switch visibleScope {
         case .project:
-            visibleCoreFields(oldPorts, scope: .project) != visibleCoreFields(newPorts, scope: .project)
+            visibleFields(oldPorts, scope: .project) != visibleFields(newPorts, scope: .project)
         case .all:
-            visibleCoreFields(oldPorts, scope: .all) != visibleCoreFields(newPorts, scope: .all)
+            visibleFields(oldPorts, scope: .all) != visibleFields(newPorts, scope: .all)
         case nil:
-            visibleCoreFields(oldPorts, scope: .all) != visibleCoreFields(newPorts, scope: .all)
+            visibleFields(oldPorts, scope: .all) != visibleFields(newPorts, scope: .all)
         }
     }
 
-    private func visibleCoreFields(_ ports: [PortUsage], scope: PortScope) -> [PortUsage] {
+    private func scanIdentityFields(_ ports: [PortUsage], scope: PortScope) -> [PortUsage] {
         switch scope {
         case .project:
-            ports.filter(\.isProjectService).map(\.coreFields)
+            ports.filter(\.isProjectService).map(\.scanIdentityFields)
         case .all:
-            ports.map(\.coreFields)
+            ports.map(\.scanIdentityFields)
+        }
+    }
+
+    private func visibleFields(_ ports: [PortUsage], scope: PortScope) -> [PortUsage] {
+        switch scope {
+        case .project:
+            ports.filter(\.isProjectService).map(\.visibleFields)
+        case .all:
+            ports.map(\.visibleFields)
         }
     }
 

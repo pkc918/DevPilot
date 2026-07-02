@@ -53,11 +53,20 @@ struct PortUsage: Identifiable, Hashable {
         self.id = "\(protocolName.rawValue)-\(port)-\(pid)-\(address)"
     }
 
-    var coreFields: PortUsage {
+    var scanIdentityFields: PortUsage {
         PortUsage(
             command: command, pid: pid, user: user,
             protocolName: protocolName, address: address,
             port: port, state: state, executablePath: executablePath
+        )
+    }
+
+    var visibleFields: PortUsage {
+        PortUsage(
+            command: command, pid: pid, user: user,
+            protocolName: protocolName, address: address,
+            port: port, state: state, executablePath: executablePath,
+            workingDirectory: workingDirectory, parentCommand: parentCommand
         )
     }
 
