@@ -46,8 +46,7 @@ final class PortMonitorStore: ObservableObject {
 
             lastUpdated = Date()
             let coreFields = ports.map(\.coreFields)
-            let hasChanges = result.ports.map(\.coreFields) != coreFields
-            if hasChanges || showActivity || errorMessage != nil {
+            if result.ports.map(\.coreFields) != coreFields || showActivity || errorMessage != nil {
                 ports = result.ports
                 diagnosticText = "raw \(result.rawLineCount) lines, parsed \(result.ports.count) ports"
                 errorMessage = nil
@@ -64,14 +63,11 @@ final class PortMonitorStore: ObservableObject {
         }
         isScanning = false
 
-        scheduleEnrich(for: ports)
-    }
+        let needsEnrich = ports.contains { $0.workingDirectory.isEmpty }
+        guard needsEnrich else { return }
 
-    private func scheduleEnrich(for currentPorts: [PortUsage]) {
         enrichTask?.cancel()
-        guard !currentPorts.isEmpty else { return }
-
-        let capture = currentPorts
+        let capture = ports
         enrichTask = Task(priority: .background) { [weak self] in
             guard let self else { return }
             let enriched = await self.scanner.enrich(capture)
