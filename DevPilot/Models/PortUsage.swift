@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 enum PortProtocol: String, CaseIterable, Identifiable {
@@ -12,13 +13,6 @@ enum PortScope: String, CaseIterable, Identifiable {
     case all = "全部端口"
 
     var id: String { rawValue }
-}
-
-enum ServiceKind: String {
-    case frontend = "前端"
-    case backend = "后端"
-    case database = "数据"
-    case service = "服务"
 }
 
 struct PortUsage: Identifiable, Hashable {
@@ -50,37 +44,12 @@ struct PortUsage: Identifiable, Hashable {
         self.id = "\(protocolName.rawValue)-\(port)-\(pid)-\(address)"
     }
 
-    var endpoint: String {
-        "\(address):\(port)"
-    }
-
-    var serviceKind: ServiceKind {
-        let normalizedCommand = command.lowercased()
-
-        if Self.databaseCommands.contains(where: normalizedCommand.contains) {
-            return .database
-        }
-
-        if Self.frontendCommands.contains(where: normalizedCommand.contains) {
-            return .frontend
-        }
-
-        if normalizedCommand.contains("node") {
-            return Self.frontendPorts.contains(port) ? .frontend : .backend
-        }
-
-        if Self.backendCommands.contains(where: normalizedCommand.contains) {
-            return .backend
-        }
-
-        return .service
-    }
-
     var isProjectService: Bool {
         protocolName == .tcp
             && state == "LISTEN"
             && isLocalAddress
-            && Self.projectCommands.contains { command.lowercased().contains($0) }
+            && isOwnedByCurrentUser
+            && isDevelopmentServerProcess
     }
 
     private var isLocalAddress: Bool {
@@ -94,33 +63,24 @@ struct PortUsage: Identifiable, Hashable {
             || address.localizedCaseInsensitiveContains("localhost")
     }
 
-    private static let frontendPorts: Set<Int> = [
-        3000, 3001, 4173, 4200, 5173, 5174, 5175, 5176, 8080
-    ]
+    private var isOwnedByCurrentUser: Bool {
+        user == String(getuid())
+            || user == NSUserName()
+            || user == ProcessInfo.processInfo.userName
+    }
 
-    private static let frontendCommands = [
-        "vite", "next", "nuxt", "astro", "webpack", "rspack", "rsbuild", "parcel", "storybook", "ng"
-    ]
+    private var isDevelopmentServerProcess: Bool {
+        let normalizedCommand = command.lowercased()
+        return Self.developmentServerCommands.contains { normalizedCommand.contains($0) }
+    }
 
-    private static let backendCommands = [
-        "python", "uvicorn", "gunicorn", "flask", "django", "java", "spring", "go", "air", "php", "ruby", "rails",
-        "dotnet", "cargo", "target/debug", "swift", "node"
-    ]
-
-    private static let databaseCommands = [
+    private static let developmentServerCommands = [
+        "node", "bun", "deno", "npm", "pnpm", "yarn",
+        "vite", "next", "nuxt", "astro", "webpack", "rspack", "rsbuild", "parcel", "storybook",
+        "python", "uvicorn", "gunicorn", "flask", "django",
+        "java", "spring", "go", "air", "php", "ruby", "rails", "dotnet", "cargo", "swift",
         "redis", "postgres", "postmaster", "mysqld", "mariadbd", "mongod", "clickhouse", "influxd"
     ]
-
-    private static let projectCommands = frontendCommands + backendCommands + databaseCommands + [
-        "bun", "deno", "pnpm", "npm", "yarn"
-    ]
-}
-
-struct ProcessPortSummary: Identifiable {
-    let command: String
-    let count: Int
-
-    var id: String { command }
 }
 
 struct PortScanResult {

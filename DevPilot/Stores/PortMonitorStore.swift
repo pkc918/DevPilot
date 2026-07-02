@@ -31,28 +31,6 @@ final class PortMonitorStore: ObservableObject {
         Set(projectPorts.map(\.pid)).count
     }
 
-    var topProcesses: [ProcessPortSummary] {
-        topProcesses(in: ports)
-    }
-
-    var projectTopProcesses: [ProcessPortSummary] {
-        topProcesses(in: projectPorts)
-    }
-
-    private func topProcesses(in ports: [PortUsage]) -> [ProcessPortSummary] {
-        Dictionary(grouping: ports, by: \.command)
-            .map { ProcessPortSummary(command: $0.key, count: $0.value.count) }
-            .sorted {
-                if $0.count == $1.count {
-                    return $0.command.localizedStandardCompare($1.command) == .orderedAscending
-                }
-
-                return $0.count > $1.count
-            }
-            .prefix(8)
-            .map { $0 }
-    }
-
     func refresh(showActivity: Bool = true) async {
         guard !isScanning else { return }
 

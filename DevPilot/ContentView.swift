@@ -82,15 +82,12 @@ struct ContentView: View {
                 selectedProtocol: $selectedProtocol,
                 selectedPort: $selectedPort
             )
-        case .gitAccounts:
-            GitAccountsWorkspace()
         }
     }
 }
 
 private enum AppFeature: String, CaseIterable, Identifiable {
     case ports
-    case gitAccounts
 
     var id: String { rawValue }
 
@@ -98,8 +95,6 @@ private enum AppFeature: String, CaseIterable, Identifiable {
         switch self {
         case .ports:
             "Port"
-        case .gitAccounts:
-            "Git"
         }
     }
 
@@ -107,8 +102,6 @@ private enum AppFeature: String, CaseIterable, Identifiable {
         switch self {
         case .ports:
             "端口与进程"
-        case .gitAccounts:
-            "身份配置"
         }
     }
 
@@ -116,8 +109,6 @@ private enum AppFeature: String, CaseIterable, Identifiable {
         switch self {
         case .ports:
             "network"
-        case .gitAccounts:
-            "person.2.badge.gearshape"
         }
     }
 }
@@ -337,17 +328,6 @@ private struct PortHeaderView: View {
     }
 }
 
-private struct GitAccountsWorkspace: View {
-    var body: some View {
-        ContentUnavailableView(
-            "Git",
-            systemImage: "person.2.badge.gearshape",
-            description: Text("多用户配置模块")
-        )
-        .navigationTitle("Git")
-    }
-}
-
 private struct StatusPill: View {
     let title: String
     let value: String?
@@ -544,18 +524,6 @@ private struct PortTableView: View {
         return .secondary
     }
 
-    private func kindColor(_ text: String) -> Color {
-        if text == ServiceKind.frontend.rawValue {
-            return .blue
-        }
-        if text == ServiceKind.backend.rawValue {
-            return .green
-        }
-        if text == ServiceKind.database.rawValue {
-            return .purple
-        }
-        return .secondary
-    }
 }
 
 private struct PortUsageGroup: Identifiable, Hashable {
@@ -568,10 +536,6 @@ private struct PortUsageGroup: Identifiable, Hashable {
 
     var protocolsText: String {
         uniqueValues(usages.map(\.protocolName.rawValue)).joined(separator: " / ")
-    }
-
-    var kindsText: String {
-        uniqueValues(usages.map { $0.serviceKind.rawValue }).joined(separator: " / ")
     }
 
     var processesText: String {
@@ -696,15 +660,6 @@ private enum PortTableRow: Identifiable, Hashable {
             group.protocolsText
         case .detail(let usage, _):
             usage.protocolName.rawValue
-        }
-    }
-
-    var kindText: String {
-        switch self {
-        case .group(let group):
-            group.kindsText
-        case .detail(let usage, _):
-            usage.serviceKind.rawValue
         }
     }
 
