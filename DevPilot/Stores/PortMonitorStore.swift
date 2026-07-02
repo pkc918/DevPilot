@@ -7,33 +7,37 @@ final class PortMonitorStore: ObservableObject {
     @Published var lastUpdated: Date?
     @Published var errorMessage: String?
     @Published var diagnosticText = "尚未执行扫描"
+    private(set) var projectPorts: [PortUsage] = []
+    private(set) var tcpCount = 0
+    private(set) var udpCount = 0
+    private(set) var processCount = 0
+    private(set) var projectProcessCount = 0
 
     private let scanner = PortScanner()
     private var isScanning = false
     private var enrichTask: Task<Void, Never>?
+    private var latestPorts: [PortUsage] = []
+    private var lastScanDate: Date?
 
-    var projectPorts: [PortUsage] {
-        ports.filter(\.isProjectService)
+    func publishLatestPortsIfNeeded() {
+        guard visibleCoreFields(ports, scope: .all) != visibleCoreFields(latestPorts, scope: .all) else {
+            return
+        }
+
+        setPorts(latestPorts)
     }
 
-    var tcpCount: Int {
-        ports.filter { $0.protocolName == .tcp }.count
-    }
-
-    var udpCount: Int {
-        ports.filter { $0.protocolName == .udp }.count
-    }
-
-    var processCount: Int {
-        Set(ports.map(\.pid)).count
-    }
-
-    var projectProcessCount: Int {
-        Set(projectPorts.map(\.pid)).count
-    }
-
-    func refresh(showActivity: Bool = true) async {
+    func refresh(
+        showActivity: Bool = true,
+        visibleScope: PortScope? = nil,
+        minimumInterval: TimeInterval? = nil
+    ) async {
         guard !isScanning else { return }
+        if let minimumInterval,
+           let lastScanDate,
+           Date().timeIntervalSince(lastScanDate) < minimumInterval {
+            return
+        }
 
         isScanning = true
         if showActivity {
@@ -41,13 +45,26 @@ final class PortMonitorStore: ObservableObject {
             errorMessage = nil
         }
 
+        var shouldEnrichLatestPorts = false
+
         do {
             let result = try await scanner.scan()
+            lastScanDate = Date()
 
-            lastUpdated = Date()
-            let coreFields = ports.map(\.coreFields)
-            if result.ports.map(\.coreFields) != coreFields || showActivity || errorMessage != nil {
-                ports = result.ports
+            let rawChanged = visibleCoreFields(latestPorts, scope: .all) != visibleCoreFields(result.ports, scope: .all)
+            let visibleChanged = hasVisibleChanges(from: ports, to: result.ports, visibleScope: visibleScope)
+            shouldEnrichLatestPorts = visibleChanged
+            let shouldPublish = showActivity
+                || errorMessage != nil
+                || visibleChanged
+
+            if rawChanged {
+                latestPorts = result.ports
+            }
+
+            if shouldPublish {
+                setPorts(rawChanged ? result.ports : latestPorts)
+                lastUpdated = Date()
                 diagnosticText = "raw \(result.rawLineCount) lines, parsed \(result.ports.count) ports"
                 errorMessage = nil
             }
@@ -63,17 +80,23 @@ final class PortMonitorStore: ObservableObject {
         }
         isScanning = false
 
-        let needsEnrich = ports.contains { $0.workingDirectory.isEmpty }
+        let needsEnrich = latestPorts.contains { $0.workingDirectory.isEmpty }
+        guard shouldEnrichLatestPorts else { return }
         guard needsEnrich else { return }
 
         enrichTask?.cancel()
-        let capture = ports
+        let capture = latestPorts
+        let scope = visibleScope
         enrichTask = Task(priority: .background) { [weak self] in
             guard let self else { return }
             let enriched = await self.scanner.enrich(capture)
             guard !Task.isCancelled else { return }
-            if enriched != self.ports {
-                self.ports = enriched
+
+            let shouldPublish = self.hasVisibleChanges(from: self.ports, to: enriched, visibleScope: scope)
+            self.latestPorts = enriched
+
+            if shouldPublish {
+                self.setPorts(enriched)
             }
         }
     }
@@ -99,5 +122,42 @@ final class PortMonitorStore: ObservableObject {
             isRefreshing = false
             isScanning = false
         }
+    }
+
+    private func setPorts(_ ports: [PortUsage]) {
+        refreshDerivedPortData(from: ports)
+        self.ports = ports
+    }
+
+    private func hasVisibleChanges(
+        from oldPorts: [PortUsage],
+        to newPorts: [PortUsage],
+        visibleScope: PortScope?
+    ) -> Bool {
+        switch visibleScope {
+        case .project:
+            visibleCoreFields(oldPorts, scope: .project) != visibleCoreFields(newPorts, scope: .project)
+        case .all:
+            visibleCoreFields(oldPorts, scope: .all) != visibleCoreFields(newPorts, scope: .all)
+        case nil:
+            visibleCoreFields(oldPorts, scope: .all) != visibleCoreFields(newPorts, scope: .all)
+        }
+    }
+
+    private func visibleCoreFields(_ ports: [PortUsage], scope: PortScope) -> [PortUsage] {
+        switch scope {
+        case .project:
+            ports.filter(\.isProjectService).map(\.coreFields)
+        case .all:
+            ports.map(\.coreFields)
+        }
+    }
+
+    private func refreshDerivedPortData(from ports: [PortUsage]) {
+        projectPorts = ports.filter(\.isProjectService)
+        tcpCount = ports.reduce(0) { $0 + ($1.protocolName == .tcp ? 1 : 0) }
+        udpCount = ports.reduce(0) { $0 + ($1.protocolName == .udp ? 1 : 0) }
+        processCount = Set(ports.map(\.pid)).count
+        projectProcessCount = Set(projectPorts.map(\.pid)).count
     }
 }

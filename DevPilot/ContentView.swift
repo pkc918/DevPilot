@@ -35,15 +35,9 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            AppSidebarView(selection: $selectedFeature, store: store)
-                .navigationSplitViewColumnWidth(min: 250, ideal: 260, max: 300)
+            AppSidebarView(selection: $selectedFeature)
         } detail: {
-            ZStack {
-                detailView
-                    .id(selectedFeature)
-                    .transition(.opacity.combined(with: .move(edge: .trailing)))
-            }
-            .animation(.easeInOut(duration: 0.18), value: selectedFeature)
+            detailView
             .frame(minWidth: 0, maxWidth: .infinity)
         }
         .frame(minWidth: 820, minHeight: 640)
@@ -51,7 +45,7 @@ struct ContentView: View {
             ToolbarItemGroup {
                 if selectedFeature == .ports {
                     Button {
-                        Task { await store.refresh() }
+                        Task { await store.refresh(visibleScope: selectedScope) }
                     } label: {
                         Label("刷新", systemImage: "arrow.clockwise")
                     }
@@ -60,12 +54,15 @@ struct ContentView: View {
                 }
             }
         }
-        .task {
-            await store.refresh()
+        .onChange(of: selectedScope) { _, _ in
+            store.publishLatestPortsIfNeeded()
+        }
+        .task(id: selectedScope) {
+            await store.refresh(visibleScope: selectedScope)
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(3))
                 if portAutoRefresh {
-                    await store.refresh(showActivity: false)
+                    await store.refresh(showActivity: false, visibleScope: selectedScope, minimumInterval: 2.5)
                 }
             }
         }
@@ -117,88 +114,19 @@ private enum AppFeature: String, CaseIterable, Identifiable {
 
 private struct AppSidebarView: View {
     @Binding var selection: AppFeature
-    @ObservedObject var store: PortMonitorStore
 
     var body: some View {
-        VStack(spacing: 0) {
-            List(selection: $selection) {
-                Section("概览") {
-                    SidebarOverviewLine(
-                        title: "活动模块",
-                        value: "\(AppFeature.allCases.count)",
-                        systemImage: "square.grid.2x2"
-                    )
-                    SidebarOverviewLine(
-                        title: "项目端口",
-                        value: "\(store.projectPorts.count)",
-                        systemImage: "network"
-                    )
-                    SidebarOverviewLine(
-                        title: "占用进程",
-                        value: "\(store.projectProcessCount)",
-                        systemImage: "cpu"
-                    )
-                }
-
-                Section("Tools") {
-                    ForEach(AppFeature.allCases) { feature in
-                        AppSidebarRow(feature: feature)
-                            .tag(feature)
-                    }
+        List(selection: $selection) {
+            Section("Tools") {
+                ForEach(AppFeature.allCases) { feature in
+                    Label(feature.title, systemImage: feature.systemImage)
+                        .tag(feature)
+                        .help(feature.subtitle)
                 }
             }
-            .listStyle(.sidebar)
-
-            Divider()
-
-            SettingsLink {
-                Label("Settings", systemImage: "gearshape")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
         }
-        .background(.bar)
+        .listStyle(.sidebar)
         .navigationTitle("DevPilot")
-    }
-}
-
-private struct SidebarOverviewLine: View {
-    let title: String
-    let value: String
-    let systemImage: String
-
-    var body: some View {
-        Label {
-            HStack {
-                Text(title)
-                Spacer()
-                Text(value)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-        } icon: {
-            Image(systemName: systemImage)
-        }
-    }
-}
-
-private struct AppSidebarRow: View {
-    let feature: AppFeature
-
-    var body: some View {
-        Label {
-            HStack(spacing: 6) {
-                Text(feature.title)
-                Text(feature.subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        } icon: {
-            Image(systemName: feature.systemImage)
-        }
     }
 }
 
