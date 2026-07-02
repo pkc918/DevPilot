@@ -24,6 +24,9 @@ struct PortUsage: Identifiable, Hashable {
     let address: String
     let port: Int
     let state: String
+    let executablePath: String
+    let workingDirectory: String
+    let parentCommand: String
 
     nonisolated init(
         command: String,
@@ -32,7 +35,10 @@ struct PortUsage: Identifiable, Hashable {
         protocolName: PortProtocol,
         address: String,
         port: Int,
-        state: String
+        state: String,
+        executablePath: String = "",
+        workingDirectory: String = "",
+        parentCommand: String = ""
     ) {
         self.command = command
         self.pid = pid
@@ -41,7 +47,37 @@ struct PortUsage: Identifiable, Hashable {
         self.address = address
         self.port = port
         self.state = state
+        self.executablePath = executablePath
+        self.workingDirectory = workingDirectory
+        self.parentCommand = parentCommand
         self.id = "\(protocolName.rawValue)-\(port)-\(pid)-\(address)"
+    }
+
+    var coreFields: PortUsage {
+        PortUsage(
+            command: command, pid: pid, user: user,
+            protocolName: protocolName, address: address,
+            port: port, state: state, executablePath: executablePath
+        )
+    }
+
+    var displayCommand: String {
+        if isProjectService, !parentCommand.isEmpty, parentCommand != command, !isShell(parentCommand) {
+            return parentCommand
+        }
+        return command
+    }
+
+    var shortProjectPath: String {
+        guard !workingDirectory.isEmpty else { return "" }
+        let components = workingDirectory.split(separator: "/")
+        guard let last = components.last else { return workingDirectory }
+        return ".../" + last
+    }
+
+    private func isShell(_ cmd: String) -> Bool {
+        let shells: Set<String> = ["bash", "zsh", "fish", "sh", "dash", "tcsh", "ksh", "csh"]
+        return shells.contains(cmd.lowercased())
     }
 
     var isProjectService: Bool {
@@ -49,7 +85,7 @@ struct PortUsage: Identifiable, Hashable {
             && state == "LISTEN"
             && isLocalAddress
             && isOwnedByCurrentUser
-            && isDevelopmentServerProcess
+            && isUserExecutable
     }
 
     private var isLocalAddress: Bool {
@@ -69,18 +105,26 @@ struct PortUsage: Identifiable, Hashable {
             || user == ProcessInfo.processInfo.userName
     }
 
-    private var isDevelopmentServerProcess: Bool {
-        let normalizedCommand = command.lowercased()
-        return Self.developmentServerCommands.contains { normalizedCommand.contains($0) }
-    }
+    private var isUserExecutable: Bool {
+        if executablePath.isEmpty {
+            return isOwnedByCurrentUser
+        }
 
-    private static let developmentServerCommands = [
-        "node", "bun", "deno", "npm", "pnpm", "yarn",
-        "vite", "next", "nuxt", "astro", "webpack", "rspack", "rsbuild", "parcel", "storybook",
-        "python", "uvicorn", "gunicorn", "flask", "django",
-        "java", "spring", "go", "air", "php", "ruby", "rails", "dotnet", "cargo", "swift",
-        "redis", "postgres", "postmaster", "mysqld", "mariadbd", "mongod", "clickhouse", "influxd"
-    ]
+        let appPrefixes = [
+            "/Applications/", "\(NSHomeDirectory())/Applications/"
+        ]
+
+        if appPrefixes.contains(where: { executablePath.hasPrefix($0) }) {
+            return false
+        }
+
+        let systemPrefixes = [
+            "/usr/sbin/", "/usr/libexec/", "/System/Library/",
+            "/sbin/", "/Library/Apple/"
+        ]
+
+        return !systemPrefixes.contains { executablePath.hasPrefix($0) }
+    }
 }
 
 struct PortScanResult {
