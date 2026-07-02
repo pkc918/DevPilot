@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          xcodebuild archive \
+            -project DevPilot.xcodeproj \
+            -scheme DevPilot \
+            -configuration Release \
+            -archivePath DevPilot.xcarchive \
+            -derivedDataPath .build \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Package
+        run: |
+          mkdir -p release/DevPilot.app
+          cp -R DevPilot.xcarchive/Products/Applications/DevPilot.app release/
+          hdiutil create -volname DevPilot -srcfolder release -ov -format UDZO DevPilot.dmg
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: DevPilot.dmg
+          generate_release_notes: true
