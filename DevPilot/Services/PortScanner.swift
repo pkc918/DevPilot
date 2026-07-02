@@ -147,7 +147,9 @@ struct PortScanner {
 
             let lines = output.split(whereSeparator: \.isNewline).count
             let rawPorts = Self.parse(output: output)
-            let exePaths = Self.resolveExecutablePaths(for: Set(rawPorts.map(\.pid)))
+            let pids = Set(rawPorts.map(\.pid))
+            let exePaths = Self.resolveExecutablePaths(for: pids)
+            let parentCommands = Self.resolveParentCommands(for: pids)
 
             let ports = rawPorts.map { port in
                 PortUsage(
@@ -158,7 +160,8 @@ struct PortScanner {
                     address: port.address,
                     port: port.port,
                     state: port.state,
-                    executablePath: exePaths[port.pid] ?? ""
+                    executablePath: exePaths[port.pid] ?? "",
+                    parentCommand: parentCommands[port.pid] ?? ""
                 )
             }
 
@@ -172,9 +175,14 @@ struct PortScanner {
 
     func enrich(_ ports: [PortUsage]) async -> [PortUsage] {
         let pids = Set(ports.map(\.pid))
+        let needsCWD = ports.contains { $0.workingDirectory.isEmpty }
+        let needsParent = ports.contains { $0.parentCommand.isEmpty }
+
+        guard needsCWD || needsParent else { return ports }
+
         return await Task.detached(priority: .background) {
-            let cwds = resolveCWDsViaLsof(for: pids)
-            let parentCommands = Self.resolveParentCommands(for: pids)
+            let cwds = needsCWD ? resolveCWDsViaLsof(for: pids) : [:]
+            let parentCommands = needsParent ? Self.resolveParentCommands(for: pids) : [:]
 
             return ports.map { port in
                 PortUsage(
@@ -186,8 +194,8 @@ struct PortScanner {
                     port: port.port,
                     state: port.state,
                     executablePath: port.executablePath,
-                    workingDirectory: cwds[port.pid] ?? "",
-                    parentCommand: parentCommands[port.pid] ?? ""
+                    workingDirectory: cwds[port.pid] ?? port.workingDirectory,
+                    parentCommand: parentCommands[port.pid] ?? port.parentCommand
                 )
             }
         }.value
