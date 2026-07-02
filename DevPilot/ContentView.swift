@@ -230,12 +230,13 @@ private struct PortMonitorWorkspace: View {
                     await store.closePortServices(usages)
                 }
             )
+            .equatable()
             .transaction { transaction in
                 transaction.animation = nil
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .searchable(text: $searchText, prompt: "搜索端口、进程、PID、用户或地址")
+        .searchable(text: $searchText, prompt: "搜索端口、进程、PID")
     }
 }
 
@@ -250,7 +251,6 @@ private struct PortHeaderView: View {
         guard let lastUpdated = store.lastUpdated else {
             return "尚未刷新"
         }
-
         return lastUpdated.formatted(date: .omitted, time: .standard)
     }
 
@@ -368,7 +368,10 @@ private struct MetricPill: View {
     }
 }
 
-private struct PortTableView: View {
+private struct PortTableView: View, Equatable {
+    static func == (lhs: PortTableView, rhs: PortTableView) -> Bool {
+        lhs.ports == rhs.ports && lhs.scope == rhs.scope && lhs.isRefreshing == rhs.isRefreshing
+    }
     let ports: [PortUsage]
     let scope: PortScope
     @Binding var selection: Int?
