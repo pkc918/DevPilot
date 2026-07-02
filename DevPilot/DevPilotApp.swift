@@ -51,10 +51,12 @@ private struct MenuBarStatusView: View {
             }
         }
         .padding(14)
-        .frame(width: 340)
+        .frame(width: 380)
         .task {
-            if store.lastUpdated == nil {
-                await store.refresh()
+            await store.refresh()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3))
+                await store.refresh(showActivity: false)
             }
         }
     }
@@ -104,42 +106,90 @@ private struct MenuBarStatusView: View {
     private var projectPortsList: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("全部项目服务")
+                Text("项目服务")
                 Spacer()
                 Text("\(store.projectPorts.count)")
                     .monospacedDigit()
             }
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
 
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 7) {
+                LazyVStack(spacing: 6) {
                     ForEach(store.projectPorts) { port in
-                        HStack(spacing: 8) {
-                            Text(port.port, format: .number)
-                                .monospacedDigit()
-                                .frame(width: 48, alignment: .leading)
-
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(port.command)
-                                    .lineLimit(1)
-                                Text(port.address)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-
-                            Spacer(minLength: 8)
-
-                            Text(port.protocolName.rawValue)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                        .font(.callout)
+                        portCard(port)
                     }
                 }
             }
-            .frame(maxHeight: 320)
+            .frame(maxHeight: 400)
+        }
+    }
+
+    private func portCard(_ port: PortUsage) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(port.port, format: .number)
+                    .font(.system(.body, design: .monospaced).weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                ProtocolBadge(protocol: port.protocolName)
+
+                Text(port.displayCommand)
+                    .font(.callout)
+                    .lineLimit(1)
+
+                Spacer(minLength: 4)
+            }
+
+            if !port.workingDirectory.isEmpty {
+                HStack(spacing: 4) {
+                    Image(systemName: "folder")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                    Text(port.shortProjectPath)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .help(port.workingDirectory)
+                }
+            } else if !port.executablePath.isEmpty {
+                HStack(spacing: 4) {
+                    Image(systemName: "doc")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                    Text(port.executablePath)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+
+            HStack(spacing: 4) {
+                Image(systemName: "globe")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                Text(port.address)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private struct ProtocolBadge: View {
+        let `protocol`: PortProtocol
+
+        var body: some View {
+            Text(`protocol`.rawValue)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(`protocol` == .tcp ? .green : .orange)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(`protocol` == .tcp ? .green.opacity(0.12) : .orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
         }
     }
 

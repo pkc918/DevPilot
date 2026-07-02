@@ -24,8 +24,10 @@ struct ContentView: View {
             guard !query.isEmpty else { return true }
 
             return item.command.localizedCaseInsensitiveContains(query)
+                || item.parentCommand.localizedCaseInsensitiveContains(query)
                 || item.user.localizedCaseInsensitiveContains(query)
                 || item.address.localizedCaseInsensitiveContains(query)
+                || item.workingDirectory.localizedCaseInsensitiveContains(query)
                 || String(item.port).contains(query)
                 || String(item.pid).contains(query)
         }
@@ -439,7 +441,18 @@ private struct PortTableView: View {
                             .lineLimit(1)
                             .foregroundStyle(row.isDetail ? .secondary : .primary)
                     }
-                    .width(min: 120, ideal: 170, max: 240)
+                    .width(min: 120, ideal: 160, max: 220)
+                    .alignment(.center)
+
+                    TableColumn("项目") { row in
+                        if row.isProjectRow, row.workingDirectoryText != "-" {
+                            ProjectPathCell(path: row.workingDirectoryText)
+                        } else {
+                            centeredText("-")
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .width(min: 120, ideal: 180, max: 300)
                     .alignment(.center)
 
                     TableColumn("PID") { row in
@@ -455,7 +468,7 @@ private struct PortTableView: View {
                             .lineLimit(1)
                             .font(.system(.body, design: .monospaced))
                     }
-                    .width(min: 240, ideal: 380, max: 700)
+                    .width(min: 120, ideal: 190, max: 350)
                     .alignment(.center)
 
                     TableColumn("状态") { row in
@@ -516,7 +529,7 @@ private struct PortTableView: View {
 
     private func protocolColor(_ text: String) -> Color {
         if text == PortProtocol.tcp.rawValue {
-            return .blue
+            return .green
         }
         if text == PortProtocol.udp.rawValue {
             return .orange
@@ -540,10 +553,10 @@ private struct PortUsageGroup: Identifiable, Hashable {
 
     var processesText: String {
         if let primaryUsage, !hasMultipleUsages {
-            return primaryUsage.command
+            return primaryUsage.displayCommand
         }
 
-        let processes = uniqueValues(usages.map(\.command))
+        let processes = uniqueValues(usages.map(\.displayCommand))
         if processes.count == 1 {
             return processes[0]
         }
@@ -585,6 +598,13 @@ private struct PortUsageGroup: Identifiable, Hashable {
     var statesText: String {
         let states = uniqueValues(usages.map { $0.state.isEmpty ? "-" : $0.state })
         return states.joined(separator: " / ")
+    }
+
+    var workingDirectoryText: String {
+        let dirs = uniqueValues(usages.map(\.workingDirectory).filter { !$0.isEmpty })
+        if dirs.isEmpty { return "-" }
+        if dirs.count == 1 { return dirs[0] }
+        return "\(dirs.count) 个目录"
     }
 
     private func uniqueValues(_ values: [String]) -> [String] {
@@ -668,8 +688,12 @@ private enum PortTableRow: Identifiable, Hashable {
         case .group(let group):
             group.processesText
         case .detail(let usage, _):
-            usage.command
+            usage.displayCommand
         }
+    }
+
+    var isProjectRow: Bool {
+        usage?.isProjectService ?? false
     }
 
     var pidText: String {
@@ -708,6 +732,15 @@ private enum PortTableRow: Identifiable, Hashable {
         }
     }
 
+    var workingDirectoryText: String {
+        switch self {
+        case .group(let group):
+            group.workingDirectoryText
+        case .detail(let usage, _):
+            usage.workingDirectory.isEmpty ? "-" : usage.workingDirectory
+        }
+    }
+
     static func groupID(_ port: Int) -> String {
         "group-\(port)"
     }
@@ -725,5 +758,39 @@ private enum PortTableRow: Identifiable, Hashable {
         }
 
         return nil
+    }
+}
+
+private struct ProjectPathCell: View {
+    let path: String
+
+    private var shortPath: String {
+        let components = path.split(separator: "/")
+        guard let last = components.last else { return path }
+        return ".../" + last
+    }
+
+    var body: some View {
+        Button {
+            NSWorkspace.shared.selectFile(path, inFileViewerRootedAtPath: "")
+        } label: {
+            Text(shortPath)
+                .lineLimit(1)
+        }
+        .buttonStyle(.plain)
+        .help(path)
+        .contextMenu {
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(path, forType: .string)
+            } label: {
+                Label("拷贝路径", systemImage: "doc.on.doc")
+            }
+            Button {
+                NSWorkspace.shared.selectFile(path, inFileViewerRootedAtPath: "")
+            } label: {
+                Label("在 Finder 中打开", systemImage: "folder")
+            }
+        }
     }
 }
