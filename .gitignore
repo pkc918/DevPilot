@@ -1,0 +1,18 @@
+.DS_Store
+
+# Xcode user state
+*.xcuserstate
+xcuserdata/
+
+# Build products
+.build/
+DerivedData/
+build/
+
+# SwiftPM / Xcode generated
+.swiftpm/
+Package.resolved
+
+# macOS app artifacts
+*.dSYM
+*.xcarchive
