@@ -10,6 +10,7 @@ final class PortMonitorStore: ObservableObject {
 
     private let scanner = PortScanner()
     private var isScanning = false
+    private var enrichTask: Task<Void, Never>?
 
     var projectPorts: [PortUsage] {
         ports.filter(\.isProjectService)
@@ -42,13 +43,13 @@ final class PortMonitorStore: ObservableObject {
 
         do {
             let result = try await scanner.scan()
-            let nextDiagnosticText = "raw \(result.rawLineCount) lines, parsed \(result.ports.count) ports"
-            let hasPortChanges = result.ports != ports
 
-            if showActivity || hasPortChanges || errorMessage != nil {
+            lastUpdated = Date()
+            let coreFields = ports.map(\.coreFields)
+            let hasChanges = result.ports.map(\.coreFields) != coreFields
+            if hasChanges || showActivity || errorMessage != nil {
                 ports = result.ports
-                lastUpdated = Date()
-                diagnosticText = nextDiagnosticText
+                diagnosticText = "raw \(result.rawLineCount) lines, parsed \(result.ports.count) ports"
                 errorMessage = nil
             }
         } catch {
@@ -62,6 +63,23 @@ final class PortMonitorStore: ObservableObject {
             isRefreshing = false
         }
         isScanning = false
+
+        scheduleEnrich(for: ports)
+    }
+
+    private func scheduleEnrich(for currentPorts: [PortUsage]) {
+        enrichTask?.cancel()
+        guard !currentPorts.isEmpty else { return }
+
+        let capture = currentPorts
+        enrichTask = Task(priority: .background) { [weak self] in
+            guard let self else { return }
+            let enriched = await self.scanner.enrich(capture)
+            guard !Task.isCancelled else { return }
+            if enriched != self.ports {
+                self.ports = enriched
+            }
+        }
     }
 
     func closePortServices(_ usages: [PortUsage]) async {
