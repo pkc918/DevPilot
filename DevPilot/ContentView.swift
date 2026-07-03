@@ -3,14 +3,16 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject private var store: PortMonitorStore
     @AppStorage("portAutoRefresh") private var portAutoRefresh = true
+    private let checkForUpdates: () -> Void
     @State private var selectedFeature: AppFeature = .ports
     @State private var searchText = ""
     @State private var selectedScope: PortScope = .project
     @State private var selectedProtocol: PortProtocol?
     @State private var selectedPort: Int?
 
-    init(store: PortMonitorStore = PortMonitorStore()) {
+    init(store: PortMonitorStore = PortMonitorStore(), checkForUpdates: @escaping () -> Void = {}) {
         self.store = store
+        self.checkForUpdates = checkForUpdates
     }
 
     private var filteredPorts: [PortUsage] {
@@ -35,7 +37,10 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            AppSidebarView(selection: $selectedFeature)
+            AppSidebarView(
+                selection: $selectedFeature,
+                checkForUpdates: checkForUpdates
+            )
         } detail: {
             detailView
                 .frame(minWidth: 0, maxWidth: .infinity)
@@ -114,19 +119,86 @@ private enum AppFeature: String, CaseIterable, Identifiable {
 
 private struct AppSidebarView: View {
     @Binding var selection: AppFeature
+    let checkForUpdates: () -> Void
+    @State private var showingUpdateInfo = false
 
     var body: some View {
-        List(selection: $selection) {
-            Section("Tools") {
-                ForEach(AppFeature.allCases) { feature in
-                    Label(feature.title, systemImage: feature.systemImage)
-                        .tag(feature)
-                        .help(feature.subtitle)
+        VStack(spacing: 0) {
+            List(selection: $selection) {
+                Section("Tools") {
+                    ForEach(AppFeature.allCases) { feature in
+                        Label(feature.title, systemImage: feature.systemImage)
+                            .tag(feature)
+                            .help(feature.subtitle)
+                    }
                 }
             }
+            .listStyle(.sidebar)
+            .navigationTitle("DevPilot")
+
+            Divider()
+
+            Button {
+                showingUpdateInfo = true
+            } label: {
+                HStack(spacing: 10) {
+                    Text("DevPilot")
+                        .font(.caption.weight(.semibold))
+
+                    Spacer()
+
+                    Text(AppVersionInfo.versionText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .help("版本与更新")
+            .sheet(isPresented: $showingUpdateInfo) {
+                UpdateInfoSheet(checkForUpdates: checkForUpdates)
+            }
         }
-        .listStyle(.sidebar)
-        .navigationTitle("DevPilot")
+    }
+}
+
+private struct UpdateInfoSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let checkForUpdates: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Form {
+                Section {
+                    LabeledContent("应用", value: "DevPilot")
+                    LabeledContent("版本", value: AppVersionInfo.versionText)
+                    LabeledContent("构建", value: AppVersionInfo.buildText)
+                }
+
+                Section {
+                    Button {
+                        checkForUpdates()
+                    } label: {
+                        Label("检查新版本", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                }
+            }
+            .formStyle(.grouped)
+
+            HStack {
+                Spacer()
+                Button("完成") {
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding([.horizontal, .bottom], 20)
+        }
+        .frame(width: 380, height: 230)
     }
 }
 

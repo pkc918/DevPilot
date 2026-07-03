@@ -12,6 +12,9 @@ build/
 # SwiftPM / Xcode generated
 .swiftpm/
 Package.resolved
+!DevPilot.xcodeproj/project.xcworkspace/xcshareddata/
+!DevPilot.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+!DevPilot.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 
 # macOS app artifacts
 *.dSYM

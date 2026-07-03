@@ -15,13 +15,27 @@ struct DevPilotApp: App {
 
     var body: some Scene {
         WindowGroup("DevPilot", id: "main") {
-            ContentView(store: store)
+            ContentView(
+                store: store,
+                checkForUpdates: {
+                    UpdateController.shared.checkForUpdates()
+                }
+            )
                 .background(MainWindowRegistrationView())
         }
         .windowResizability(.contentMinSize)
 
         Settings {
-            SettingsView()
+            SettingsView {
+                UpdateController.shared.checkForUpdates()
+            }
+        }
+        .commands {
+            CommandGroup(after: .appInfo) {
+                Button("检查更新...") {
+                    UpdateController.shared.checkForUpdates()
+                }
+            }
         }
     }
 }
