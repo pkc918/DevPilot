@@ -15,7 +15,7 @@ jobs:
     env:
       APP_NAME: DevPilot
       DERIVED_DATA: .build/DerivedData
-      SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
+      SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY || secrets.SPARKLE_PUBLIC_ED_KEY }}
       SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
 
     steps:
@@ -25,7 +25,7 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           if [[ -z "$SPARKLE_PUBLIC_ED_KEY" ]]; then
-            echo "::error::Missing repository variable SPARKLE_PUBLIC_ED_KEY"
+            echo "::error::Missing SPARKLE_PUBLIC_ED_KEY. Add it as a repository variable or repository secret."
             exit 1
           fi
           if [[ -z "$SPARKLE_PRIVATE_KEY" ]]; then
