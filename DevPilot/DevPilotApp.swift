@@ -161,19 +161,31 @@ private struct MenuBarStatusView: View {
 
             Spacer()
 
-            MenuBarIconButton(
-                systemImage: "arrow.clockwise",
-                help: "刷新",
-                action: onRefresh
-            )
-            .symbolEffect(.rotate, value: store.isRefreshing)
-            .disabled(store.isRefreshing)
+            refreshButton
 
             MenuBarIconButton(
                 systemImage: "macwindow",
                 help: "打开主窗口",
                 action: onOpenMainWindow
             )
+        }
+    }
+
+    @ViewBuilder
+    private var refreshButton: some View {
+        let button = MenuBarIconButton(
+            systemImage: "arrow.clockwise",
+            help: "刷新",
+            action: onRefresh
+        )
+
+        if #available(macOS 15.0, *) {
+            button
+                .symbolEffect(.rotate, value: store.isRefreshing)
+                .disabled(store.isRefreshing)
+        } else {
+            button
+                .disabled(store.isRefreshing)
         }
     }
 
