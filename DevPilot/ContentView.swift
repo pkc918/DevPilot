@@ -38,12 +38,12 @@ struct ContentView: View {
             AppSidebarView(selection: $selectedFeature)
         } detail: {
             detailView
-            .frame(minWidth: 0, maxWidth: .infinity)
+                .frame(minWidth: 0, maxWidth: .infinity)
         }
         .frame(minWidth: 820, minHeight: 640)
         .toolbar {
-            ToolbarItemGroup {
-                if selectedFeature == .ports {
+            if selectedFeature == .ports {
+                ToolbarItem(placement: .primaryAction) {
                     Button {
                         Task { await store.refresh(visibleScope: selectedScope) }
                     } label: {
@@ -143,6 +143,7 @@ private struct PortMonitorWorkspace: View {
         VStack(spacing: 0) {
             PortHeaderView(
                 store: store,
+                metadata: store.metadata,
                 visibleCount: ports.count,
                 selectedScope: selectedScope,
                 selectedScopeBinding: $selectedScopeBinding,
@@ -170,13 +171,14 @@ private struct PortMonitorWorkspace: View {
 
 private struct PortHeaderView: View {
     @ObservedObject var store: PortMonitorStore
+    @ObservedObject var metadata: PortRefreshMetadata
     let visibleCount: Int
     let selectedScope: PortScope
     @Binding var selectedScopeBinding: PortScope
     @Binding var selectedProtocol: PortProtocol?
 
     private var lastUpdatedText: String {
-        guard let lastUpdated = store.lastUpdated else {
+        guard let lastUpdated = metadata.lastUpdated else {
             return "尚未刷新"
         }
         return lastUpdated.formatted(date: .omitted, time: .standard)
@@ -244,7 +246,7 @@ private struct PortHeaderView: View {
 
                 Spacer()
 
-                Text("\(lastUpdatedText) · \(store.diagnosticText)")
+                Text("\(lastUpdatedText) · \(metadata.diagnosticText)")
                     .lineLimit(1)
                     .foregroundStyle(.tertiary)
             }

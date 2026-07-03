@@ -1,12 +1,28 @@
 import Foundation
 import Combine
 
+final class PortRefreshMetadata: ObservableObject {
+    @Published private(set) var lastUpdated: Date?
+    @Published private(set) var diagnosticText = "尚未执行扫描"
+
+    func update(lastUpdated: Date, diagnosticText: String) {
+        self.lastUpdated = lastUpdated
+        if self.diagnosticText != diagnosticText {
+            self.diagnosticText = diagnosticText
+        }
+    }
+
+    func updateDiagnosticText(_ diagnosticText: String) {
+        guard self.diagnosticText != diagnosticText else { return }
+        self.diagnosticText = diagnosticText
+    }
+}
+
 final class PortMonitorStore: ObservableObject {
     @Published var ports: [PortUsage] = []
     @Published var isRefreshing = false
-    @Published var lastUpdated: Date?
     @Published var errorMessage: String?
-    @Published var diagnosticText = "尚未执行扫描"
+    let metadata = PortRefreshMetadata()
     private(set) var projectPorts: [PortUsage] = []
     private(set) var tcpCount = 0
     private(set) var udpCount = 0
@@ -24,7 +40,7 @@ final class PortMonitorStore: ObservableObject {
             return
         }
 
-        setPorts(latestPorts)
+        publishPorts(latestPorts)
     }
 
     func refresh(
@@ -41,8 +57,8 @@ final class PortMonitorStore: ObservableObject {
 
         isScanning = true
         if showActivity {
-            isRefreshing = true
-            errorMessage = nil
+            setRefreshing(true)
+            setErrorMessage(nil)
         }
 
         var shouldEnrichLatestPorts = false
@@ -55,30 +71,32 @@ final class PortMonitorStore: ObservableObject {
             let candidatePorts = rawChanged ? result.ports : latestPorts
             let visibleChanged = hasVisibleChanges(from: ports, to: candidatePorts, visibleScope: visibleScope)
             shouldEnrichLatestPorts = visibleChanged
-            let shouldPublish = showActivity
-                || errorMessage != nil
-                || visibleChanged
 
             if rawChanged {
                 latestPorts = result.ports
             }
 
-            lastUpdated = Date()
-            diagnosticText = "raw \(result.rawLineCount) lines, parsed \(result.ports.count) ports"
-            errorMessage = nil
-
-            if shouldPublish {
-                setPorts(candidatePorts)
+            let resolvedError = errorMessage
+            publishScanMetadata(
+                rawLineCount: result.rawLineCount,
+                portCount: result.ports.count
+            )
+            if visibleChanged {
+                setErrorMessage(nil)
+                publishPorts(candidatePorts)
+            } else if resolvedError != nil {
+                setErrorMessage(nil)
             }
+
         } catch {
             if showActivity || errorMessage != error.localizedDescription {
-                errorMessage = error.localizedDescription
-                diagnosticText = error.localizedDescription
+                setDiagnosticText(error.localizedDescription)
+                setErrorMessage(error.localizedDescription)
             }
         }
 
         if showActivity {
-            isRefreshing = false
+            setRefreshing(false)
         }
         isScanning = false
 
@@ -98,7 +116,7 @@ final class PortMonitorStore: ObservableObject {
             self.latestPorts = enriched
 
             if shouldPublish {
-                self.setPorts(enriched)
+                self.publishPorts(enriched)
             }
         }
     }
@@ -110,8 +128,8 @@ final class PortMonitorStore: ObservableObject {
         guard !pids.isEmpty else { return }
 
         isScanning = true
-        isRefreshing = true
-        errorMessage = nil
+        setRefreshing(true)
+        setErrorMessage(nil)
 
         do {
             try await scanner.terminateProcesses(pids: pids)
@@ -119,16 +137,41 @@ final class PortMonitorStore: ObservableObject {
             isScanning = false
             await refresh()
         } catch {
-            errorMessage = error.localizedDescription
-            diagnosticText = error.localizedDescription
-            isRefreshing = false
+            setDiagnosticText(error.localizedDescription)
+            setErrorMessage(error.localizedDescription)
+            setRefreshing(false)
             isScanning = false
         }
     }
 
-    private func setPorts(_ ports: [PortUsage]) {
+    private func publishPorts(_ ports: [PortUsage]) {
+        guard visibleFields(self.ports, scope: .all) != visibleFields(ports, scope: .all) else {
+            return
+        }
+
         refreshDerivedPortData(from: ports)
         self.ports = ports
+    }
+
+    private func publishScanMetadata(rawLineCount: Int, portCount: Int) {
+        metadata.update(
+            lastUpdated: Date(),
+            diagnosticText: "raw \(rawLineCount) lines, parsed \(portCount) ports"
+        )
+    }
+
+    private func setRefreshing(_ value: Bool) {
+        guard isRefreshing != value else { return }
+        isRefreshing = value
+    }
+
+    private func setErrorMessage(_ value: String?) {
+        guard errorMessage != value else { return }
+        errorMessage = value
+    }
+
+    private func setDiagnosticText(_ value: String) {
+        metadata.updateDiagnosticText(value)
     }
 
     private func hasVisibleChanges(
