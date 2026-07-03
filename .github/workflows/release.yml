@@ -5,33 +5,89 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-latest
 
+    env:
+      APP_NAME: DevPilot
+      DERIVED_DATA: .build/DerivedData
+      SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
+      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build
+      - name: Prepare release metadata
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ -z "$SPARKLE_PUBLIC_ED_KEY" ]]; then
+            echo "::error::Missing repository variable SPARKLE_PUBLIC_ED_KEY"
+            exit 1
+          fi
+          if [[ -z "$SPARKLE_PRIVATE_KEY" ]]; then
+            echo "::error::Missing repository secret SPARKLE_PRIVATE_KEY"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+          echo "FEED_URL=https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/appcast.xml" >> "$GITHUB_ENV"
+          echo "DOWNLOAD_URL_PREFIX=https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+
+      - name: Resolve packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project DevPilot.xcodeproj \
+            -scheme DevPilot \
+            -derivedDataPath "$DERIVED_DATA"
+
+      - name: Build archive
         run: |
           xcodebuild archive \
             -project DevPilot.xcodeproj \
             -scheme DevPilot \
             -configuration Release \
-            -archivePath DevPilot.xcarchive \
-            -derivedDataPath .build \
+            -archivePath "$APP_NAME.xcarchive" \
+            -derivedDataPath "$DERIVED_DATA" \
+            MARKETING_VERSION="$VERSION" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            SPARKLE_FEED_URL="$FEED_URL" \
+            SPARKLE_PUBLIC_ED_KEY="$SPARKLE_PUBLIC_ED_KEY" \
+            CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=YES
 
-      - name: Package
+      - name: Package DMG and update ZIP
         run: |
-          mkdir -p release/DevPilot.app
-          cp -R DevPilot.xcarchive/Products/Applications/DevPilot.app release/
-          hdiutil create -volname DevPilot -srcfolder release -ov -format UDZO DevPilot.dmg
+          app_path="$APP_NAME.xcarchive/Products/Applications/$APP_NAME.app"
+          mkdir -p release
+          ditto -c -k --sequesterRsrc --keepParent "$app_path" "release/$APP_NAME-$GITHUB_REF_NAME.zip"
+          script/package_dmg.sh "$app_path" "release/$APP_NAME-$GITHUB_REF_NAME.dmg" "$APP_NAME"
+
+      - name: Generate Sparkle appcast
+        run: |
+          sparkle_bin="$(find "$DERIVED_DATA/SourcePackages/artifacts" -path "*/Sparkle/bin" -type d | head -n 1)"
+          if [[ -z "$sparkle_bin" ]]; then
+            echo "::error::Sparkle tools not found in $DERIVED_DATA"
+            exit 1
+          fi
+
+          mkdir -p appcast
+          cp "release/$APP_NAME-$GITHUB_REF_NAME.zip" appcast/
+          printf "%s" "$SPARKLE_PRIVATE_KEY" | "$sparkle_bin/generate_appcast" \
+            --ed-key-file - \
+            --download-url-prefix "$DOWNLOAD_URL_PREFIX" \
+            appcast
+          cp appcast/appcast.xml release/appcast.xml
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          files: DevPilot.dmg
+          files: |
+            release/DevPilot-${{ github.ref_name }}.dmg
+            release/DevPilot-${{ github.ref_name }}.zip
+            release/appcast.xml
           generate_release_notes: true
