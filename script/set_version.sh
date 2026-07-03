@@ -10,7 +10,8 @@ fi
 version="$1"
 build_number="${2:-}"
 
-if [[ ! "$version" =~ '^[0-9]+(\.[0-9]+){1,2}$' ]]; then
+semver_re='^[0-9]+(\.[0-9]+){1,2}$'
+if [[ ! "$version" =~ $semver_re ]]; then
   echo "Version must look like 1.0 or 1.0.1"
   exit 64
 fi
@@ -19,7 +20,8 @@ if [[ -z "$build_number" ]]; then
   build_number="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
 fi
 
-if [[ ! "$build_number" =~ '^[0-9]+$' ]]; then
+num_re='^[0-9]+$'
+if [[ ! "$build_number" =~ $num_re ]]; then
   echo "Build number must be a positive integer"
   exit 64
 fi
