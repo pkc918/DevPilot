@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct ContentView: View {
@@ -442,7 +443,11 @@ private struct PortTableView: View, Equatable {
                     .alignment(.center)
 
                     TableColumn("进程") { row in
-                        centeredText(row.processText, minWidth: 96)
+                        ProcessCell(
+                            text: row.processText,
+                            executablePath: row.executablePath,
+                            isMultiple: row.isMultipleGroup
+                        )
                             .foregroundStyle(row.isDetail ? .secondary : .primary)
                             .help(row.processText)
                     }
@@ -542,6 +547,332 @@ private struct PortTableView: View, Equatable {
             return .orange
         }
         return .secondary
+    }
+
+}
+
+private struct ProcessCell: View {
+    let text: String
+    let executablePath: String
+    let isMultiple: Bool
+
+    private var icon: ProcessIcon? {
+        ProcessIcon.matching(text: text, executablePath: executablePath, isMultiple: isMultiple)
+    }
+
+    var body: some View {
+        if let icon {
+            iconView(for: icon)
+                .frame(maxWidth: .infinity, alignment: .center)
+        } else {
+            Text(text)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(minWidth: 96, maxWidth: .infinity, alignment: .center)
+        }
+    }
+
+    @ViewBuilder
+    private func iconView(for icon: ProcessIcon) -> some View {
+        switch icon.kind {
+        case .brand(let brand):
+            Image(brand.assetName)
+                .renderingMode(brand.renderingMode)
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(brand.color)
+                .frame(width: 20, height: 20)
+        case .symbol(let name):
+            Image(systemName: name)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(icon.foreground)
+                .frame(width: 20, height: 20)
+                .background(icon.background, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+        case .fileIcon(let image):
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 20, height: 20)
+        }
+    }
+}
+
+private struct ProcessIcon {
+    enum Kind {
+        case brand(ProcessBrand)
+        case symbol(String)
+        case fileIcon(NSImage)
+    }
+
+    let kind: Kind
+    let foreground: Color
+    let background: Color
+
+    static func matching(text: String, executablePath: String, isMultiple: Bool) -> ProcessIcon? {
+        if isMultiple {
+            return ProcessIcon(
+                kind: .symbol("square.stack.3d.up.fill"),
+                foreground: .indigo,
+                background: .indigo.opacity(0.14)
+            )
+        }
+
+        let normalized = text.lowercased()
+        let normalizedPath = executablePath.lowercased()
+        let searchableText = "\(normalized) \(normalizedPath)"
+        let name = normalized
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "-" })
+            .first
+            .map(String.init) ?? normalized
+
+        if searchableText.contains("orbstack") {
+            return ProcessIcon(kind: .brand(.orbstack), foreground: .purple, background: .clear)
+        }
+
+        if searchableText.contains("webstorm") {
+            return ProcessIcon(kind: .brand(.webstorm), foreground: .cyan, background: .clear)
+        }
+
+        if searchableText.contains("intellij") || searchableText.contains("idea") {
+            return ProcessIcon(kind: .brand(.intellijidea), foreground: .pink, background: .clear)
+        }
+
+        if searchableText.contains("pycharm") {
+            return ProcessIcon(kind: .brand(.pycharm), foreground: .green, background: .clear)
+        }
+
+        if searchableText.contains("goland") {
+            return ProcessIcon(kind: .brand(.goland), foreground: .cyan, background: .clear)
+        }
+
+        if searchableText.contains("clion") {
+            return ProcessIcon(kind: .brand(.clion), foreground: .teal, background: .clear)
+        }
+
+        if searchableText.contains("datagrip") {
+            return ProcessIcon(kind: .brand(.datagrip), foreground: .green, background: .clear)
+        }
+
+        if searchableText.contains("phpstorm") {
+            return ProcessIcon(kind: .brand(.phpstorm), foreground: .purple, background: .clear)
+        }
+
+        if searchableText.contains("rubymine") {
+            return ProcessIcon(kind: .brand(.rubymine), foreground: .red, background: .clear)
+        }
+
+        if searchableText.contains("rider") {
+            return ProcessIcon(kind: .brand(.rider), foreground: .orange, background: .clear)
+        }
+
+        if searchableText.contains("jetbrains") {
+            return ProcessIcon(kind: .brand(.jetbrains), foreground: .pink, background: .clear)
+        }
+
+        if searchableText.contains("google chrome") || searchableText.contains("chrome helper") || searchableText.contains("googlechrome") {
+            return ProcessIcon(kind: .brand(.googlechrome), foreground: .blue, background: .clear)
+        }
+
+        if searchableText.contains("visual studio code") || searchableText.contains("vscode") || searchableText.contains("code helper") {
+            return ProcessIcon(kind: .brand(.vscode), foreground: .blue, background: .clear)
+        }
+
+        if searchableText.contains("wechat") || searchableText.contains("weixin") {
+            return ProcessIcon(kind: .brand(.wechat), foreground: .green, background: .clear)
+        }
+
+        if searchableText.contains("google") {
+            return ProcessIcon(kind: .brand(.google), foreground: .blue, background: .clear)
+        }
+
+        if searchableText.contains("docker") {
+            return ProcessIcon(kind: .brand(.docker), foreground: .blue, background: .clear)
+        }
+
+        switch name {
+        case "node", "nodejs", "npm", "npx", "pnpm", "yarn", "vite", "next", "nextjs":
+            return ProcessIcon(kind: .brand(.node), foreground: .green, background: .clear)
+        case "go", "gopls", "air":
+            return ProcessIcon(kind: .brand(.go), foreground: .cyan, background: .clear)
+        case "rust", "rustc", "cargo", "rust-analyzer":
+            return ProcessIcon(kind: .brand(.rust), foreground: .orange, background: .clear)
+        case "python", "python3", "uv", "pytest", "gunicorn", "uvicorn":
+            return ProcessIcon(kind: .brand(.python), foreground: .blue, background: .clear)
+        case "ruby", "rails", "bundle":
+            return ProcessIcon(kind: .brand(.ruby), foreground: .red, background: .clear)
+        case "java", "gradle", "mvn", "kotlin":
+            return ProcessIcon(kind: .brand(.java), foreground: .brown, background: .clear)
+        case "php", "composer":
+            return ProcessIcon(kind: .brand(.php), foreground: .purple, background: .clear)
+        case "postgres", "postgresql", "psql":
+            return ProcessIcon(kind: .brand(.postgres), foreground: .teal, background: .clear)
+        case "redis", "redis-server":
+            return ProcessIcon(kind: .brand(.redis), foreground: .red, background: .clear)
+        case "mysql", "mysqld":
+            return ProcessIcon(kind: .brand(.mysql), foreground: .orange, background: .clear)
+        case "code":
+            return ProcessIcon(kind: .brand(.vscode), foreground: .blue, background: .clear)
+        default:
+            if !executablePath.isEmpty, FileManager.default.fileExists(atPath: executablePath) {
+                let image = NSWorkspace.shared.icon(forFile: executablePath)
+                image.size = NSSize(width: 20, height: 20)
+                return ProcessIcon(kind: .fileIcon(image), foreground: .primary, background: .clear)
+            }
+            return nil
+        }
+    }
+
+}
+
+private enum ProcessBrand {
+    case node
+    case go
+    case rust
+    case python
+    case ruby
+    case java
+    case php
+    case docker
+    case postgres
+    case redis
+    case mysql
+    case webstorm
+    case intellijidea
+    case pycharm
+    case goland
+    case clion
+    case datagrip
+    case phpstorm
+    case rubymine
+    case rider
+    case jetbrains
+    case google
+    case googlechrome
+    case vscode
+    case wechat
+    case orbstack
+
+    var assetName: String {
+        switch self {
+        case .node:
+            "ProcessIcons/node"
+        case .go:
+            "ProcessIcons/go"
+        case .rust:
+            "ProcessIcons/rust"
+        case .python:
+            "ProcessIcons/python"
+        case .ruby:
+            "ProcessIcons/ruby"
+        case .java:
+            "ProcessIcons/java"
+        case .php:
+            "ProcessIcons/php"
+        case .docker:
+            "ProcessIcons/docker"
+        case .postgres:
+            "ProcessIcons/postgres"
+        case .redis:
+            "ProcessIcons/redis"
+        case .mysql:
+            "ProcessIcons/mysql"
+        case .webstorm:
+            "ProcessIcons/webstorm"
+        case .intellijidea:
+            "ProcessIcons/intellijidea"
+        case .pycharm:
+            "ProcessIcons/pycharm"
+        case .goland:
+            "ProcessIcons/goland"
+        case .clion:
+            "ProcessIcons/clion"
+        case .datagrip:
+            "ProcessIcons/datagrip"
+        case .phpstorm:
+            "ProcessIcons/phpstorm"
+        case .rubymine:
+            "ProcessIcons/rubymine"
+        case .rider:
+            "ProcessIcons/rider"
+        case .jetbrains:
+            "ProcessIcons/jetbrains"
+        case .google:
+            "ProcessIcons/google"
+        case .googlechrome:
+            "ProcessIcons/googlechrome"
+        case .vscode:
+            "ProcessIcons/vscode"
+        case .wechat:
+            "ProcessIcons/wechat"
+        case .orbstack:
+            "ProcessIcons/orbstack"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .node:
+            Color(red: 0.34, green: 0.62, blue: 0.19)
+        case .go:
+            Color(red: 0, green: 0.68, blue: 0.78)
+        case .rust:
+            Color(red: 0.49, green: 0.27, blue: 0.13)
+        case .python:
+            Color(red: 0.21, green: 0.43, blue: 0.67)
+        case .ruby:
+            Color(red: 0.80, green: 0.06, blue: 0.07)
+        case .java:
+            Color(red: 0.23, green: 0.39, blue: 0.62)
+        case .php:
+            Color(red: 0.31, green: 0.34, blue: 0.60)
+        case .docker:
+            Color(red: 0.09, green: 0.51, blue: 0.86)
+        case .postgres:
+            Color(red: 0.20, green: 0.43, blue: 0.62)
+        case .redis:
+            Color(red: 0.84, green: 0.10, blue: 0.11)
+        case .mysql:
+            Color(red: 0.25, green: 0.48, blue: 0.60)
+        case .webstorm:
+            Color(red: 0, green: 0.74, blue: 0.93)
+        case .intellijidea:
+            Color(red: 1, green: 0.18, blue: 0.45)
+        case .pycharm:
+            Color(red: 0.13, green: 0.78, blue: 0.30)
+        case .goland:
+            Color(red: 0, green: 0.72, blue: 0.83)
+        case .clion:
+            Color(red: 0, green: 0.74, blue: 0.64)
+        case .datagrip:
+            Color(red: 0.10, green: 0.78, blue: 0.37)
+        case .phpstorm:
+            Color(red: 0.58, green: 0.30, blue: 0.96)
+        case .rubymine:
+            Color(red: 0.87, green: 0.09, blue: 0.22)
+        case .rider:
+            Color(red: 1, green: 0.45, blue: 0.16)
+        case .jetbrains:
+            Color(red: 1, green: 0.23, blue: 0.49)
+        case .google:
+            Color(red: 0.26, green: 0.52, blue: 0.96)
+        case .googlechrome:
+            Color(red: 0.26, green: 0.52, blue: 0.96)
+        case .vscode:
+            Color(red: 0, green: 0.48, blue: 0.80)
+        case .wechat:
+            Color(red: 0.10, green: 0.72, blue: 0.23)
+        case .orbstack:
+            .primary
+        }
+    }
+
+    var renderingMode: Image.TemplateRenderingMode {
+        switch self {
+        case .orbstack:
+            .original
+        default:
+            .template
+        }
     }
 
 }
@@ -696,6 +1027,15 @@ private enum PortTableRow: Identifiable, Hashable {
             group.processesText
         case .detail(let usage, _):
             usage.displayCommand
+        }
+    }
+
+    var executablePath: String {
+        switch self {
+        case .group(let group):
+            group.primaryUsage?.executablePath ?? ""
+        case .detail(let usage, _):
+            usage.executablePath
         }
     }
 
