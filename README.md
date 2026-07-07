@@ -1,5 +1,9 @@
 # DevPilot
 
+[![macOS](https://img.shields.io/badge/macOS-15.0%2B-blue)](https://developer.apple.com/macos/)
+[![Xcode](https://img.shields.io/badge/Xcode-16%2B-blue)](https://developer.apple.com/xcode/)
+[![Swift](https://img.shields.io/badge/Swift-6.0%2B-orange)](https://swift.org)
+
 macOS 菜单栏端口监控工具。AI 编码 agent 跑完任务经常留下一堆没关的服务端口，得回命令行 `lsof` + `kill` 手动清理。DevPilot 把这些端口直接挂在菜单栏 —— 哪个进程、什么协议、跑在哪个项目目录一目了然，点一下就能关。
 
 <img src="assets/product.png" alt="DevPilot 主窗口" width="800">
@@ -34,7 +38,7 @@ xcodebuild -project DevPilot.xcodeproj -scheme DevPilot -configuration Release
 
 或用 Xcode 打开 `DevPilot.xcodeproj`，选择 Debug scheme 运行。
 
-要求 macOS 14+，Xcode 16+。
+要求 macOS 15+，Xcode 16+。
 
 ## 项目结构
 
