@@ -3,48 +3,12 @@ import Darwin
 
 // MARK: - libproc bridge
 
-nonisolated private let PROC_PIDT_SHORTBSDINFO: Int32 = 13
-nonisolated private let MAXPATHLEN: Int32 = 1024
-
-nonisolated private let libprocHandle: UnsafeMutableRawPointer? = {
-    dlopen("/usr/lib/libproc.dylib", RTLD_NOW)
-}()
-
-private typealias ProcPidpathFunc = @convention(c) (Int32, UnsafeMutablePointer<CChar>?, UInt32) -> Int32
-private typealias ProcPidinfoFunc = @convention(c) (Int32, Int32, UInt64, UnsafeMutableRawPointer?, Int32) -> Int32
-
-nonisolated private func resolveProcPidpath() -> ProcPidpathFunc? {
-    guard let handle = libprocHandle,
-          let sym = dlsym(handle, "proc_pidpath") else { return nil }
-    return unsafeBitCast(sym, to: ProcPidpathFunc.self)
-}
-
-nonisolated private func resolveProcPidinfo() -> ProcPidinfoFunc? {
-    guard let handle = libprocHandle,
-          let sym = dlsym(handle, "proc_pidinfo") else { return nil }
-    return unsafeBitCast(sym, to: ProcPidinfoFunc.self)
-}
-
-private struct ProcBSDShortInfo {
-    var pbsi_pid: UInt32 = 0
-    var pbsi_ppid: UInt32 = 0
-    var pbsi_pgid: UInt32 = 0
-    var pbsi_status: UInt32 = 0
-    var pbsi_comm: (CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar) = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-    var pbsi_flags: UInt64 = 0
-    var pbsi_uid: uid_t = 0
-    var pbsi_gid: gid_t = 0
-    var pbsi_ruid: uid_t = 0
-    var pbsi_rgid: gid_t = 0
-    var pbsi_svuid: uid_t = 0
-    var pbsi_svgid: gid_t = 0
-    var pbsi_rfu: Int32 = 0
-}
-
-nonisolated private func commandFromBSDInfo(_ info: ProcBSDShortInfo) -> String {
-    var comm = info.pbsi_comm
-    return withUnsafePointer(to: &comm.0) { ptr in
-        String(cString: UnsafeRawPointer(ptr).assumingMemoryBound(to: CChar.self))
+nonisolated private func commandFromBSDInfo(_ info: proc_bsdshortinfo) -> String {
+    var command = info.pbsi_comm
+    return withUnsafeBytes(of: &command) { rawBuffer in
+        let bytes = rawBuffer.bindMemory(to: CChar.self)
+        let utf8Bytes = bytes.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }
+        return String(decoding: utf8Bytes, as: UTF8.self)
     }
 }
 
@@ -204,12 +168,11 @@ struct PortScanner {
     // MARK: - Executable path (fast, via proc_pidpath)
 
     nonisolated private static func resolveExecutablePaths(for pids: Set<Int>) -> [Int: String] {
-        guard let pidpathFunc = resolveProcPidpath() else { return [:] }
         var result: [Int: String] = [:]
         var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
 
         for pid in pids where pid > 0 {
-            let len = pidpathFunc(Int32(pid), &buffer, UInt32(MAXPATHLEN))
+            let len = proc_pidpath(Int32(pid), &buffer, UInt32(MAXPATHLEN))
             if len > 0 {
                 result[pid] = String(cString: buffer)
             }
@@ -242,15 +205,13 @@ struct PortScanner {
     }
 
     nonisolated private static func resolveParentCommands(for pids: Set<Int>) -> [Int: String] {
-        guard let pidinfoFunc = resolveProcPidinfo() else { return [:] }
-
         var pidToParentPID: [Int: Int] = [:]
         var uniqueParentPIDs = Set<Int>()
-        let infoSize = Int32(MemoryLayout<ProcBSDShortInfo>.size)
+        let infoSize = Int32(MemoryLayout<proc_bsdshortinfo>.size)
 
         for pid in pids where pid > 0 {
-            var info = ProcBSDShortInfo()
-            let ret = pidinfoFunc(Int32(pid), PROC_PIDT_SHORTBSDINFO, 0, &info, infoSize)
+            var info = proc_bsdshortinfo()
+            let ret = proc_pidinfo(Int32(pid), PROC_PIDT_SHORTBSDINFO, 0, &info, infoSize)
             guard ret > 0 else { continue }
 
             let ppid = Int(info.pbsi_ppid)
@@ -263,8 +224,8 @@ struct PortScanner {
         var parentCommand: [Int: String] = [:]
 
         for ppid in uniqueParentPIDs {
-            var info = ProcBSDShortInfo()
-            let ret = pidinfoFunc(Int32(ppid), PROC_PIDT_SHORTBSDINFO, 0, &info, infoSize)
+            var info = proc_bsdshortinfo()
+            let ret = proc_pidinfo(Int32(ppid), PROC_PIDT_SHORTBSDINFO, 0, &info, infoSize)
             guard ret > 0 else { continue }
 
             let name = commandFromBSDInfo(info)
