@@ -79,3 +79,7 @@ UDP 端口同样会被扫描，显示在「全部端口」范围中。
 - `NSWorkspace` Finder 集成 + `NSPasteboard` 路径拷贝
 - [Sparkle 2](https://sparkle-project.org) 自动更新
 - GitHub Actions 自动构建 + appcast 生成
+
+## 友情链接
+
+- [LINUX DO](https://linux.do/)
