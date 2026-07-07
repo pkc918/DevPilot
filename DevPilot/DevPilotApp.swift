@@ -65,7 +65,8 @@ private final class StatusBarController: NSObject {
         statusItem = item
 
         if let button = item.button {
-            button.image = NSImage(systemSymbolName: "network", accessibilityDescription: "DevPilot")
+            button.image = statusBarAppIcon()
+            button.imagePosition = .imageOnly
             button.action = #selector(togglePopover(_:))
             button.target = self
         }
@@ -86,6 +87,17 @@ private final class StatusBarController: NSObject {
         )
 
         Task { await store.refresh(visibleScope: .project) }
+    }
+
+    private func statusBarAppIcon() -> NSImage {
+        let image = NSApp.applicationIconImage.copy() as? NSImage
+            ?? NSImage(systemSymbolName: "network", accessibilityDescription: "DevPilot")
+            ?? NSImage()
+
+        image.size = NSSize(width: 18, height: 18)
+        image.isTemplate = false
+        image.accessibilityDescription = "DevPilot"
+        return image
     }
 
     @objc private func togglePopover(_ sender: NSStatusBarButton) {
@@ -279,15 +291,22 @@ private struct MenuBarPortRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
                 Text(port.port.formatted(.number))
                     .font(.system(.title3, design: .rounded).weight(.semibold))
                     .monospacedDigit()
                     .frame(minWidth: 56, alignment: .leading)
 
-                Text(port.displayProcessName)
-                    .font(.callout.weight(.medium))
-                    .lineLimit(1)
+                ProcessCell(
+                    text: port.displayProcessName,
+                    executablePath: port.executablePath,
+                    isMultiple: false,
+                    fillsAvailableWidth: false,
+                    iconSize: 16
+                )
+                .font(.callout.weight(.medium))
+                .frame(height: 24, alignment: .center)
+                .help(port.displayProcessName)
 
                 MenuBarTag(text: port.serverURLLabel, systemImage: "paperplane", tint: .secondary)
                     .layoutPriority(1)

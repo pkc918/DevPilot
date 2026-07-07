@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 struct ContentView: View {
@@ -551,10 +550,12 @@ private struct PortTableView: View, Equatable {
 
 }
 
-private struct ProcessCell: View {
+struct ProcessCell: View {
     let text: String
     let executablePath: String
     let isMultiple: Bool
+    var fillsAvailableWidth = true
+    var iconSize: CGFloat = 20
 
     private var icon: ProcessIcon? {
         ProcessIcon.matching(text: text, executablePath: executablePath, isMultiple: isMultiple)
@@ -563,12 +564,16 @@ private struct ProcessCell: View {
     var body: some View {
         if let icon {
             iconView(for: icon)
-                .frame(maxWidth: .infinity, alignment: .center)
+                .frame(maxWidth: fillsAvailableWidth ? .infinity : nil, alignment: .center)
         } else {
             Text(text)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .frame(minWidth: 96, maxWidth: .infinity, alignment: .center)
+                .frame(
+                    minWidth: fillsAvailableWidth ? 96 : nil,
+                    maxWidth: fillsAvailableWidth ? .infinity : nil,
+                    alignment: .center
+                )
         }
     }
 
@@ -581,18 +586,13 @@ private struct ProcessCell: View {
                 .resizable()
                 .scaledToFit()
                 .foregroundStyle(brand.color)
-                .frame(width: 20, height: 20)
+                .frame(width: iconSize, height: iconSize)
         case .symbol(let name):
             Image(systemName: name)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(icon.foreground)
-                .frame(width: 20, height: 20)
+                .frame(width: iconSize, height: iconSize)
                 .background(icon.background, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-        case .fileIcon(let image):
-            Image(nsImage: image)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 20, height: 20)
         }
     }
 }
@@ -601,7 +601,6 @@ private struct ProcessIcon {
     enum Kind {
         case brand(ProcessBrand)
         case symbol(String)
-        case fileIcon(NSImage)
     }
 
     let kind: Kind
@@ -610,11 +609,7 @@ private struct ProcessIcon {
 
     static func matching(text: String, executablePath: String, isMultiple: Bool) -> ProcessIcon? {
         if isMultiple {
-            return ProcessIcon(
-                kind: .symbol("square.stack.3d.up.fill"),
-                foreground: .indigo,
-                background: .indigo.opacity(0.14)
-            )
+            return nil
         }
 
         let normalized = text.lowercased()
@@ -713,11 +708,6 @@ private struct ProcessIcon {
         case "code":
             return ProcessIcon(kind: .brand(.vscode), foreground: .blue, background: .clear)
         default:
-            if !executablePath.isEmpty, FileManager.default.fileExists(atPath: executablePath) {
-                let image = NSWorkspace.shared.icon(forFile: executablePath)
-                image.size = NSSize(width: 20, height: 20)
-                return ProcessIcon(kind: .fileIcon(image), foreground: .primary, background: .clear)
-            }
             return nil
         }
     }
