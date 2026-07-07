@@ -442,9 +442,9 @@ private struct PortTableView: View, Equatable {
                     .alignment(.center)
 
                     TableColumn("进程") { row in
-                        centeredText(row.processText)
-                            .lineLimit(1)
+                        centeredText(row.processText, minWidth: 96)
                             .foregroundStyle(row.isDetail ? .secondary : .primary)
+                            .help(row.processText)
                     }
                     .width(min: 120, ideal: 160, max: 220)
                     .alignment(.center)
@@ -523,9 +523,11 @@ private struct PortTableView: View, Equatable {
         }
     }
 
-    private func centeredText(_ text: String) -> some View {
+    private func centeredText(_ text: String, minWidth: CGFloat = 0) -> some View {
         Text(text)
-            .frame(maxWidth: .infinity, alignment: .center)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(minWidth: minWidth, maxWidth: .infinity, alignment: .center)
     }
 
     private func closeTitle(for row: PortTableRow) -> String {
