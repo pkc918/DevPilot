@@ -10,7 +10,7 @@ struct ContentView: View {
     @State private var selectedProtocol: PortProtocol?
     @State private var selectedPort: Int?
 
-    init(store: PortMonitorStore = PortMonitorStore(), checkForUpdates: @escaping () -> Void = {}) {
+    init(store: PortMonitorStore, checkForUpdates: @escaping () -> Void = {}) {
         self.store = store
         self.checkForUpdates = checkForUpdates
     }

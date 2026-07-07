@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 
+@MainActor
 final class PortRefreshMetadata: ObservableObject {
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var diagnosticText = "尚未执行扫描"
@@ -18,6 +19,7 @@ final class PortRefreshMetadata: ObservableObject {
     }
 }
 
+@MainActor
 final class PortMonitorStore: ObservableObject {
     @Published var ports: [PortUsage] = []
     @Published var isRefreshing = false
