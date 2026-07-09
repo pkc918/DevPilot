@@ -91,3 +91,52 @@ jobs:
             release/DevPilot-${{ github.ref_name }}.zip
             release/appcast.xml
           generate_release_notes: true
+
+      - name: Calculate Homebrew cask sha256
+        id: homebrew
+        run: |
+          dmg_path="release/$APP_NAME-$GITHUB_REF_NAME.dmg"
+          sha256="$(shasum -a 256 "$dmg_path" | awk '{print $1}')"
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Validate Homebrew tap token
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [[ -z "$HOMEBREW_TAP_TOKEN" ]]; then
+            echo "::error::Missing repository secret HOMEBREW_TAP_TOKEN. It must have Contents read/write access to pkc918/homebrew-tap."
+            exit 1
+          fi
+
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: pkc918/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update Homebrew cask
+        working-directory: homebrew-tap
+        env:
+          CASK_VERSION: ${{ env.VERSION }}
+          CASK_SHA256: ${{ steps.homebrew.outputs.sha256 }}
+        run: |
+          if [[ -z "$CASK_VERSION" || -z "$CASK_SHA256" ]]; then
+            echo "::error::Missing cask version or sha256"
+            exit 1
+          fi
+
+          cask_file="Casks/devpilot.rb"
+          ruby -pi -e '$_.sub!(/version "[^"]+"/, "version \"#{ENV.fetch(%q[CASK_VERSION])}\""); $_.sub!(/sha256 "[^"]+"/, "sha256 \"#{ENV.fetch(%q[CASK_SHA256])}\"")' "$cask_file"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet -- "$cask_file"; then
+            echo "Homebrew cask is already up to date."
+            exit 0
+          fi
+
+          git add "$cask_file"
+          git commit -m "Update DevPilot to $CASK_VERSION"
+          git push
