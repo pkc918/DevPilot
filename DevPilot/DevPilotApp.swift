@@ -14,7 +14,7 @@ struct DevPilotApp: App {
     @StateObject private var store = AppState.portStore
 
     var body: some Scene {
-        WindowGroup("DevPilot", id: "main") {
+        Window("DevPilot", id: "main") {
             ContentView(
                 store: store,
                 checkForUpdates: {
@@ -119,8 +119,25 @@ private final class StatusBarController: NSObject {
             return
         }
 
+        MainWindowPresenter.presentExistingWindow()
+    }
+}
+
+private enum MainWindowPresenter {
+    @discardableResult
+    static func presentExistingWindow() -> Bool {
+        guard let window = NSApp.windows.first(where: { $0.title == "DevPilot" }) else {
+            return false
+        }
+
+        if window.isMiniaturized {
+            window.deminiaturize(nil)
+        }
+
         NSApp.activate(ignoringOtherApps: true)
-        NSApp.windows.first { $0.title == "DevPilot" }?.makeKeyAndOrderFront(nil)
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+        return true
     }
 }
 
@@ -132,7 +149,9 @@ private struct MainWindowRegistrationView: View {
             .frame(width: 0, height: 0)
             .onAppear {
                 StatusBarController.shared.openMainWindow = {
-                    openWindow(id: "main")
+                    if !MainWindowPresenter.presentExistingWindow() {
+                        openWindow(id: "main")
+                    }
                     NSApp.activate(ignoringOtherApps: true)
                 }
             }
