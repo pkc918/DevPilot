@@ -1,0 +1,7 @@
+.nuxt
+.output
+.vercel
+node_modules
+.idea
+.DS_Store
+*.log

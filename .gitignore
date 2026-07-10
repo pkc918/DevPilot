@@ -19,3 +19,6 @@ Package.resolved
 # macOS app artifacts
 *.dSYM
 *.xcarchive
+
+# Local package manager cache
+.pnpm-store/
