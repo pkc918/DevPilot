@@ -40,6 +40,7 @@ struct DevPilotApp: App {
     }
 }
 
+@MainActor
 private enum AppState {
     static let portStore = PortMonitorStore()
 }
