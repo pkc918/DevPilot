@@ -40,14 +40,14 @@ jobs:
       - name: Resolve packages
         run: |
           xcodebuild -resolvePackageDependencies \
-            -project DevPilot.xcodeproj \
+            -project macos/DevPilot.xcodeproj \
             -scheme DevPilot \
             -derivedDataPath "$DERIVED_DATA"
 
       - name: Build archive
         run: |
           xcodebuild archive \
-            -project DevPilot.xcodeproj \
+            -project macos/DevPilot.xcodeproj \
             -scheme DevPilot \
             -configuration Release \
             -archivePath "$APP_NAME.xcarchive" \

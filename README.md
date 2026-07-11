@@ -39,28 +39,31 @@ brew install --cask pkc918/tap/devpilot
 ```bash
 git clone git@github.com:pkc918/DevPilot.git
 cd DevPilot
-xcodebuild -project DevPilot.xcodeproj -scheme DevPilot -configuration Release
+xcodebuild -project macos/DevPilot.xcodeproj -scheme DevPilot -configuration Release
 ```
 
-或用 Xcode 打开 `DevPilot.xcodeproj`，选择 Debug scheme 运行。
+或用 Xcode 打开 `macos/DevPilot.xcodeproj`，选择 Debug scheme 运行。
 
 要求 macOS 15+，Xcode 16+。
 
 ## 项目结构
 
 ```
-DevPilot/
-├── DevPilotApp.swift          # 入口：NSStatusBar 菜单栏 + 主窗口 + 设置
-├── ContentView.swift          # 主界面：侧边栏 + 端口表格 + 筛选栏
-├── SettingsView.swift         # 设置面板（自动刷新开关 + 更新检查）
-├── UpdateController.swift     # Sparkle 2 自动更新控制器
-├── AppVersionInfo.swift       # 版本号工具
-├── Models/
-│   └── PortUsage.swift        # 端口数据模型 + isProjectService 分类逻辑
-├── Services/
-│   └── PortScanner.swift      # lsof 扫描 + libproc 进程信息 + kill
-└── Stores/
-    └── PortMonitorStore.swift # 状态管理 + 双缓冲 + 范围感知刷新
+macos/
+├── DevPilot.xcodeproj/
+├── DevPilotInfo.plist
+└── DevPilot/
+    ├── DevPilotApp.swift          # 入口：NSStatusBar 菜单栏 + 主窗口 + 设置
+    ├── ContentView.swift          # 主界面：侧边栏 + 端口表格 + 筛选栏
+    ├── SettingsView.swift         # 设置面板（自动刷新开关 + 更新检查）
+    ├── UpdateController.swift     # Sparkle 2 自动更新控制器
+    ├── AppVersionInfo.swift       # 版本号工具
+    ├── Models/
+    │   └── PortUsage.swift        # 端口数据模型 + isProjectService 分类逻辑
+    ├── Services/
+    │   └── PortScanner.swift      # lsof 扫描 + libproc 进程信息 + kill
+    └── Stores/
+        └── PortMonitorStore.swift # 状态管理 + 双缓冲 + 范围感知刷新
 ```
 
 ## 分类逻辑

@@ -3,7 +3,7 @@ set -euo pipefail
 
 MODE="${1:-run}"
 APP_NAME="DevPilot"
-PROJECT_PATH="DevPilot.xcodeproj"
+PROJECT_PATH="macos/DevPilot.xcodeproj"
 SCHEME="DevPilot"
 CONFIGURATION="Debug"
 

@@ -26,7 +26,7 @@ if [[ ! "$build_number" =~ $num_re ]]; then
   exit 64
 fi
 
-project_file="DevPilot.xcodeproj/project.pbxproj"
+project_file="macos/DevPilot.xcodeproj/project.pbxproj"
 
 if [[ ! -f "$project_file" ]]; then
   echo "Xcode project file not found: $project_file"
