@@ -1,0 +1,140 @@
+name: Windows
+
+on:
+  pull_request:
+    paths:
+      - "windows/**"
+      - ".github/workflows/windows.yml"
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+    paths:
+      - "windows/**"
+      - ".github/workflows/windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: windows
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: windows/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: windows/src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Test TypeScript frontend
+        run: npm test
+
+      - name: Type-check TypeScript frontend
+        run: npm run typecheck
+
+      - name: Build frontend assets for Tauri tests
+        run: npm run frontend:build
+
+      - name: Test Rust backend
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Smoke-test Windows port discovery and termination
+        shell: pwsh
+        run: |
+          $port = 43191
+          $server = Start-Process node `
+            -ArgumentList @("--experimental-strip-types", "tests/fixture-listener.ts", "$port") `
+            -WorkingDirectory $PWD `
+            -NoNewWindow `
+            -PassThru
+
+          try {
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 30; $attempt++) {
+              if (Test-NetConnection 127.0.0.1 -Port $port -InformationLevel Quiet -WarningAction SilentlyContinue) {
+                $ready = $true
+                break
+              }
+              Start-Sleep -Milliseconds 250
+            }
+            if (-not $ready) {
+              throw "Fixture TCP listener did not start on port $port"
+            }
+
+            cargo run --release `
+              --manifest-path src-tauri/Cargo.toml `
+              --bin devpilot-self-test `
+              -- --port $port --terminate
+            if ($LASTEXITCODE -ne 0) {
+              throw "DevPilot backend smoke test failed with exit code $LASTEXITCODE"
+            }
+
+            $server.WaitForExit(10000) | Out-Null
+            if (-not $server.HasExited) {
+              throw "DevPilot reported success but did not terminate fixture PID $($server.Id)"
+            }
+          }
+          finally {
+            if (-not $server.HasExited) {
+              Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+      - name: Apply tag version
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          if ($version -notmatch '^\d+\.\d+\.\d+([-.][0-9A-Za-z.-]+)?$') {
+            throw "Tag version '$version' is not a supported semantic version"
+          }
+
+          $package = Get-Content package.json -Raw | ConvertFrom-Json
+          $package.version = $version
+          $package | ConvertTo-Json -Depth 20 | Set-Content package.json -Encoding utf8NoBOM
+
+          $config = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $config.version = $version
+          $config | ConvertTo-Json -Depth 20 | Set-Content src-tauri/tauri.conf.json -Encoding utf8NoBOM
+
+          $manifest = Get-Content src-tauri/Cargo.toml -Raw
+          $manifest = $manifest -replace '(?m)^version = "[^"]+"$', "version = `"$version`""
+          Set-Content src-tauri/Cargo.toml $manifest -Encoding utf8NoBOM
+
+      - name: Build NSIS and MSI installers
+        run: npm run build
+
+      - name: Upload Windows installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: DevPilot-Windows-${{ github.ref_name }}
+          if-no-files-found: error
+          path: |
+            windows/src-tauri/target/release/bundle/nsis/*.exe
+            windows/src-tauri/target/release/bundle/msi/*.msi
+
+      - name: Add installers to GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            windows/src-tauri/target/release/bundle/nsis/*.exe
+            windows/src-tauri/target/release/bundle/msi/*.msi
+          fail_on_unmatched_files: true
