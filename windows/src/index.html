@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>DevPilot</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell" id="main-app">
+      <aside class="sidebar">
+        <div class="brand">
+          <img src="./app-icon.png" alt="" />
+          <div>
+            <strong>DevPilot</strong>
+            <span>Developer Tools</span>
+          </div>
+        </div>
+
+        <p class="section-label">TOOLS</p>
+        <button class="nav-item active" type="button">
+          <span class="nav-icon">⌁</span>
+          <span><strong>Port</strong><small>端口与进程</small></span>
+        </button>
+
+        <button class="version-button" id="version-button" type="button">
+          <span>DevPilot</span>
+          <span id="sidebar-version">v0.1.0</span>
+        </button>
+      </aside>
+
+      <main class="workspace">
+        <div class="window-toolbar">
+          <label class="search-box">
+            <span>⌕</span>
+            <input id="search-input" type="search" placeholder="搜索端口、进程、PID" autocomplete="off" />
+          </label>
+          <button class="icon-button" id="refresh-button" type="button" title="刷新 (Ctrl+R)" aria-label="刷新">
+            <span class="refresh-glyph">↻</span>
+          </button>
+        </div>
+
+        <header class="port-header">
+          <div class="heading-row">
+            <div>
+              <h1>Port</h1>
+              <p>本机开发服务端口、进程和监听状态</p>
+            </div>
+            <div class="filters">
+              <div class="segmented" id="protocol-filter" aria-label="协议筛选">
+                <button class="active" data-value="all" type="button">全部</button>
+                <button data-value="TCP" type="button">TCP</button>
+                <button data-value="UDP" type="button">UDP</button>
+              </div>
+              <div class="segmented" id="scope-filter" aria-label="范围筛选">
+                <button class="active" data-value="project" type="button">项目服务</button>
+                <button data-value="all" type="button">全部端口</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="metrics-row">
+            <span class="status-metric"><i id="status-dot"></i><span id="status-label">尚未扫描</span><strong id="visible-count"></strong></span>
+            <span>TCP <strong id="tcp-count">0</strong></span>
+            <span>UDP <strong id="udp-count">0</strong></span>
+            <span>进程 <strong id="process-count">0</strong></span>
+            <span class="diagnostic" id="diagnostic">尚未执行扫描</span>
+          </div>
+        </header>
+
+        <section class="table-area">
+          <div class="empty-state" id="empty-state" hidden>
+            <div class="empty-icon">⌁</div>
+            <h2 id="empty-title">没有找到项目服务端口</h2>
+            <p id="empty-message">当前默认只显示本机开发服务的 TCP 监听端口。</p>
+          </div>
+          <div class="table-scroll" id="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th class="disclosure-column"></th>
+                  <th>端口</th>
+                  <th>协议</th>
+                  <th>进程</th>
+                  <th>项目</th>
+                  <th>PID</th>
+                  <th>地址</th>
+                  <th>状态</th>
+                </tr>
+              </thead>
+              <tbody id="port-rows"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <section class="tray-panel" id="tray-panel">
+      <header>
+        <div>
+          <h1 id="tray-title">项目服务</h1>
+          <p id="tray-subtitle">正在扫描</p>
+        </div>
+        <div class="tray-actions">
+          <button id="tray-refresh" class="icon-button" type="button" title="刷新">↻</button>
+          <button id="tray-open-main" class="icon-button" type="button" title="打开主窗口">▣</button>
+        </div>
+      </header>
+      <div class="tray-content" id="tray-content"></div>
+    </section>
+
+    <div class="modal-backdrop" id="settings-modal" hidden>
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <header>
+          <div>
+            <h2 id="settings-title">DevPilot 设置</h2>
+            <p>Windows 桌面端</p>
+          </div>
+          <button class="icon-button modal-close" type="button" aria-label="关闭">×</button>
+        </header>
+        <div class="settings-body">
+          <h3>Port</h3>
+          <label class="setting-row">
+            <span><strong>自动刷新端口状态</strong><small>关闭后仍可通过主窗口按钮或 Ctrl+R 手动刷新。</small></span>
+            <input id="auto-refresh-toggle" type="checkbox" role="switch" />
+          </label>
+          <h3>Updates</h3>
+          <dl class="version-grid">
+            <dt>当前版本</dt><dd id="settings-version">v0.1.0</dd>
+            <dt>构建版本</dt><dd id="settings-build">0.1.0</dd>
+          </dl>
+          <div class="update-row">
+            <button class="primary-button" id="check-update" type="button">检查新版本</button>
+            <span id="update-result"></span>
+          </div>
+        </div>
+        <footer><button class="primary-button modal-close" type="button">完成</button></footer>
+      </section>
+    </div>
+
+    <div class="context-menu" id="context-menu" hidden>
+      <button id="context-close-service" type="button"><span>⊗</span><span>关闭端口服务</span></button>
+      <div class="menu-separator path-action"></div>
+      <button class="path-action" id="context-copy-path" type="button"><span>⧉</span><span>拷贝路径</span></button>
+      <button class="path-action" id="context-open-path" type="button"><span>▱</span><span>在资源管理器中打开</span></button>
+    </div>
+    <div class="toast" id="toast" hidden></div>
+
+    <script type="module" src="/main.ts"></script>
+  </body>
+</html>

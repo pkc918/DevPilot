@@ -1,0 +1,68 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "DevPilot",
+  "version": "0.1.0",
+  "identifier": "com.pkc918.devpilot.windows",
+  "build": {
+    "beforeDevCommand": "npm run frontend:dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run frontend:build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "DevPilot",
+        "url": "index.html",
+        "width": 1100,
+        "height": 720,
+        "minWidth": 820,
+        "minHeight": 640,
+        "center": true,
+        "resizable": true,
+        "visible": true
+      },
+      {
+        "label": "tray",
+        "title": "DevPilot 项目服务",
+        "url": "index.html?view=tray",
+        "width": 420,
+        "height": 460,
+        "minWidth": 420,
+        "minHeight": 240,
+        "maxWidth": 420,
+        "maxHeight": 460,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "visible": false,
+        "shadow": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' customprotocol: asset:; img-src 'self' asset: data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "category": "DeveloperTool",
+    "shortDescription": "Windows 端口与本地开发服务监控工具",
+    "longDescription": "在系统托盘和主窗口中查看、筛选并关闭占用端口的本地开发服务。",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  }
+}
